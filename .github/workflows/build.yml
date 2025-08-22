@@ -8,6 +8,8 @@ jobs:
     steps:
       - name: Show file structure
         run: ls -la
+      - name: Show current directory
+        run: pwd
     #   - name: Set up QEMU
     #     uses: docker/setup-qemu-action@v3
     #   - name: Set up Docker Buildx
