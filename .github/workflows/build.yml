@@ -14,6 +14,8 @@ jobs:
     #     run: npm run lint
       - name: Show file structure
         run: ls -la
+      - name: Show Docker version
+        run: docker -v
     #   - name: Show current directory
     #     run: pwd
       - name: Set up QEMU
