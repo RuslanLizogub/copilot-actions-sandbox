@@ -1,18 +1,19 @@
 # syntax=docker/dockerfile:1
-# Stage 1: build
-FROM node:22 AS build
+
+ARG NODE_VERSION=18
+FROM node:${NODE_VERSION} AS build
 WORKDIR /opt/app
 
-# Устанавливаем зависимости по lock-файлу
+# Ставим зависимости по lock-файлу
 COPY package*.json ./
 RUN npm ci
 
 # Копируем исходники и собираем
 COPY . .
-RUN npm run build --prod
+RUN npm run build
 
-# Stage 2: runtime (только прод-зависимости + собранный dist)
-FROM node:22
+# Runtime-слой: только прод-зависимости + dist
+FROM node:${NODE_VERSION}
 ENV NODE_ENV=production
 WORKDIR /opt/app
 
@@ -21,4 +22,4 @@ RUN npm ci --omit=dev
 
 COPY --from=build /opt/app/dist ./dist
 
-CMD ["node", "./dist/main.js"]
+CMD ["node", "dist/main.js"]
