@@ -16,8 +16,8 @@ jobs:
         run: ls -la
       - name: Show Docker version
         run: docker -v
-    #   - name: Show current directory
-    #     run: pwd
+      - name: Show current directory
+        run: pwd
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
