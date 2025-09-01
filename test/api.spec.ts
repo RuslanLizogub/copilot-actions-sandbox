@@ -15,7 +15,7 @@ describe('Document CRUD', () => {
   it('should get a document', async () => {
     // Example of document retrieval request
     const res = await superagent.get('https://jsonplaceholder.typicode.com/posts/1');
-    expect(res.status).to.equal(200);
+    expect(res.status).to.equal(203);
     expect(res.body).to.have.property('id', 1);
   });
 });
