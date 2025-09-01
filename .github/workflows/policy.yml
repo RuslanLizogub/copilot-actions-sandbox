@@ -1,0 +1,37 @@
+# .github/workflows/policy.yml
+name: Policy
+on:
+  pull_request:
+    types: [opened, synchronize, edited, reopened]
+jobs:
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+  # Example 1: prohibit new top-level folders except allowed ones
+      - name: Enforce repo structure
+        run: |
+          set -e
+          base="origin/${{ github.base_ref }}"
+          git fetch --no-tags --depth=50 origin ${{ github.base_ref }}
+          NEW_DIRS=$(git diff --name-only --diff-filter=A "$base"... | awk -F/ '{print $1}' | sort -u)
+          echo "$NEW_DIRS" | grep -Ev '^(apps|packages|docs|.github)$' && {
+            echo "::error title=Forbidden top-level dirs::New directories have been created outside the allowed list."
+            exit 1
+          } || true
+
+  # Example 2: quick prohibition of direct DB import outside the data layer (for JS/TS)
+      - name: Semgrep policy (optional)
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: |
+            rules:
+              - id: no-direct-db-import
+                patterns:
+                  - pattern: import $X from 'db'
+                  - pattern-not: |
+                      // allowed only in packages/data/**
+                message: "Direct import of 'db' outside the data layer is forbidden"
+                severity: ERROR
+        continue-on-error: false
