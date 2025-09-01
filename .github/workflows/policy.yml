@@ -1,37 +1,62 @@
-# .github/workflows/policy.yml
-name: Policy
+name: Policy - Repo structure
 on:
   pull_request:
-    types: [opened, synchronize, edited, reopened]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
 jobs:
-  policy:
+  structure:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  # Example 1: prohibit new top-level folders except allowed ones
-      - name: Enforce repo structure
+      - name: Enforce repository structure (demo)
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
+
+          # Base for comparison — target branch of PR (usually main)
           base="origin/${{ github.base_ref }}"
           git fetch --no-tags --depth=50 origin ${{ github.base_ref }}
-          NEW_DIRS=$(git diff --name-only --diff-filter=A "$base"... | awk -F/ '{print $1}' | sort -u)
-          echo "$NEW_DIRS" | grep -Ev '^(apps|packages|docs|.github)$' && {
-            echo "::error title=Forbidden top-level dirs::New directories have been created outside the allowed list."
-            exit 1
-          } || true
 
-  # Example 2: quick prohibition of direct DB import outside the data layer (for JS/TS)
-      - name: Semgrep policy (optional)
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: |
-            rules:
-              - id: no-direct-db-import
-                patterns:
-                  - pattern: import $X from 'db'
-                  - pattern-not: |
-                      // allowed only in packages/data/**
-                message: "Direct import of 'db' outside the data layer is forbidden"
-                severity: ERROR
-        continue-on-error: false
+          # 1) Required files in the repository root
+          req_files=(Dockerfile README.md package.json)
+          missing=()
+          for f in "${req_files[@]}"; do
+            [[ -e "$f" ]] || missing+=("$f")
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error title=Missing required files::${missing[*]}"
+            exit 1
+          fi
+
+          # 2) There must be at least one *.spec.ts in test/
+          if ! ls -1 test/*.spec.ts >/dev/null 2>&1; then
+            echo "::error title=Missing tests::Add at least one test/*.spec.ts"
+            exit 1
+          fi
+
+          # 3) There must be at least one *.yml in .github/workflows/
+          if ! ls -1 .github/workflows/*.yml >/dev/null 2>&1; then
+            echo "::error title=Workflows missing::.github/workflows is empty"
+            exit 1
+          fi
+
+          # 4) Prohibit unexpected top-level items in PR
+          # Allowed list (edit as needed)
+          allowed=(.github test api node_modules .eslintrc.js .gitignore Dockerfile README.md package.json package-lock.json yarn.lock tsconfig.json copilot-instructions.md)
+          new_top=$(git diff --name-status "$base"... --diff-filter=AR | awk '{print $2}' | awk -F/ '{print $1}' | sort -u || true)
+
+          for n in $new_top; do
+            if [[ " ${allowed[*]} " != *" $n "* ]]; then
+              echo "::error title=Forbidden top-level item::$n is not allowed at repository root."
+              echo "Allowed: ${allowed[*]}"
+              exit 1
+            fi
+          done
+
+          echo "Structure policy passed ✅"
