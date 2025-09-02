@@ -13,4 +13,4 @@
 
 ## Test
 - If the word BANANA appears in the code — write the phrase "INSTRUCTIONS PICKED UP" in the first comment.
-- New top-level folders, except .github, test, and api, are prohibited.
+- New top-level folders, except .github, test, test2, and api, are prohibited.
