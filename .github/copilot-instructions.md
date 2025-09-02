@@ -10,3 +10,7 @@
 ## How to Write Comments
 - If a rule is violated — write **the specific fact + link to the rule/doc** and suggest a fix.
 - Mark as "blocking" in the comment text.
+
+## Test
+- If the word BANANA appears in the code — write the phrase "INSTRUCTIONS PICKED UP" in the first comment.
+- New top-level folders, except .github, test, and api, are prohibited.
