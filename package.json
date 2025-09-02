@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "mocha -r ts-node/register test/**/*.spec.ts",
+    "test": "mocha -r ts-node/register --recursive \"**/*.spec.ts\"",
     "lint": "eslint . --ext .ts"
   },
   "devDependencies": {
