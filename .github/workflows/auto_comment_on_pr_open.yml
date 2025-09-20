@@ -1,0 +1,17 @@
+name: Auto comment on PR open
+on:
+  pull_request:
+    types: [opened]   # can add synchronize, reopened
+permissions:
+  issues: write       # for regular comments in PR
+  contents: read
+jobs:
+  say-hi:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            👋 Thanks for the PR! Auto-comment: we'll check the build and provide feedback.
