@@ -16,39 +16,7 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
-            👋 Thanks for the PR! Auto-comment: we'll check the build and provide feedback.
-            
             @codex review
-            mode: comprehensive
-            scope: entire pull request
-            include-low-severity: true
-            nitpicks: true
-
-            output-format:
-              - inline comments per finding with file:line anchors
-              - minimal fix as a ```diff``` patch when possible
-              - each finding: [Severity][Category] <title> + brief rationale + concrete fix
-              - one final summary with checklist and CLEAR blockers
-
-            tests-focus:
-              - detect duplicate/identical assertions and redundant expects
-              - flag changed production code without corresponding tests
-              - cover edge cases/branches; look for flakiness patterns (timers/sleeps/random/network/timezones)
-              - validate mocks/fixtures isolation and cleanup
-
-            code-focus:
-              - correctness & regressions (null/undefined, off-by-one, error paths)
-              - security (OWASP, secrets leakage, injection/SSRF/path traversal, authN/Z)
-              - performance (N+1 queries, hot loops, unnecessary I/O, large payloads)
-              - reliability (timeouts, retries, backoff, resource leaks)
-              - API/contracts & types (backward compatibility, DTO/schema)
-              - migrations/schema (idempotent, reversible, data safety)
-              - concurrency & race conditions
-              - logging/telemetry/config consistency
-
-            acceptance-criteria:
-              - mark hard issues as BLOCKER with "REQUEST_CHANGES"
-              - others as SUGGESTION or NIT
   
   say-updated:
     if: github.event.action == 'synchronize'
@@ -58,37 +26,6 @@ jobs:
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
-          body: |
-            🔄 PR updated with new commits! We'll re-run checks and review the changes.
-            
+          body: |    
             @codex review
-            mode: comprehensive
-            scope: entire pull request
-            include-low-severity: true
-            nitpicks: true
-
-            output-format:
-              - inline comments per finding with file:line anchors
-              - minimal fix as a ```diff``` patch when possible
-              - each finding: [Severity][Category] <title> + brief rationale + concrete fix
-              - one final summary with checklist and CLEAR blockers
-
-            tests-focus:
-              - detect duplicate/identical assertions and redundant expects
-              - flag changed production code without corresponding tests
-              - cover edge cases/branches; look for flakiness patterns (timers/sleeps/random/network/timezones)
-              - validate mocks/fixtures isolation and cleanup
-
-            code-focus:
-              - correctness & regressions (null/undefined, off-by-one, error paths)
-              - security (OWASP, secrets leakage, injection/SSRF/path traversal, authN/Z)
-              - performance (N+1 queries, hot loops, unnecessary I/O, large payloads)
-              - reliability (timeouts, retries, backoff, resource leaks)
-              - API/contracts & types (backward compatibility, DTO/schema)
-              - migrations/schema (idempotent, reversible, data safety)
-              - concurrency & race conditions
-              - logging/telemetry/config consistency
-
-            acceptance-criteria:
-              - mark hard issues as BLOCKER with "REQUEST_CHANGES"
-              - others as SUGGESTION or NIT
+        
