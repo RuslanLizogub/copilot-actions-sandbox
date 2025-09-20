@@ -7,7 +7,6 @@ describe('User CRUD', () => {
   it('should create a user', async () => {
     const res = await jsonPlaceholder.createUser({ name: 'Test User' });
     expect(res.status).to.equal(201);
-    expect(res.status).to.equal(200);
     expect(res.body).to.have.property('name', 'Test User');
   });
 });
