@@ -17,6 +17,7 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             👋 Thanks for the PR! Auto-comment: we'll check the build and provide feedback.
+            @codex review
   
   say-updated:
     if: github.event.action == 'synchronize'
@@ -28,3 +29,4 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             🔄 PR updated with new commits! We'll re-run checks and review the changes.
+            @codex review
