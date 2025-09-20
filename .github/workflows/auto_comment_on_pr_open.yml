@@ -1,9 +1,10 @@
 name: Auto comment on PR open
 on:
   pull_request:
-    types: [opened]   # can add synchronize, reopened
+    types: [opened]    # can add synchronize, reopened
 permissions:
-  issues: write       # for regular comments in PR
+  issues: write        # for regular comments in PR
+  pull-requests: write # for PR comments
   contents: read
 jobs:
   say-hi:
