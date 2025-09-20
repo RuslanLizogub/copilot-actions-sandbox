@@ -1,18 +1,30 @@
 name: Auto comment on PR open
 on:
   pull_request:
-    types: [opened]    # can add synchronize, reopened
+    types: [opened, synchronize]    # can add reopened
 permissions:
   issues: write        # for regular comments in PR
   pull-requests: write # for PR comments
   contents: read
 jobs:
   say-hi:
+    if: github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
-      - name: Comment
+      - name: Comment on PR open
         uses: peter-evans/create-or-update-comment@v4
         with:
           issue-number: ${{ github.event.pull_request.number }}
           body: |
             👋 Thanks for the PR! Auto-comment: we'll check the build and provide feedback.
+  
+  say-updated:
+    if: github.event.action == 'synchronize'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on PR update
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body: |
+            🔄 PR updated with new commits! We'll re-run checks and review the changes.
