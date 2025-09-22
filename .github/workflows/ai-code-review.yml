@@ -12,33 +12,18 @@ jobs:
   ai-review:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        
-      - name: AI Code Review with Gemini
-        uses: actions/github-script@v7
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           script: |
             const fs = require('fs');
-            const path = require('path');
-            const MAX_FILES = 20;
-            const MAX_DIFF_SIZE = 12000;
             
-            // Load project-specific instructions
-            let projectInstructions = '';
-            try {
-              const instructionsPath = '.github/copilot-instructions.md';
-              if (fs.existsSync(instructionsPath)) {
-                projectInstructions = fs.readFileSync(instructionsPath, 'utf8');
-                console.log('Loaded project instructions from .github/copilot-instructions.md');
-              }
-            } catch (error) {
-              console.log('No project instructions found, using defaults');
-            }
+            // Load project instructions
+            const instructions = fs.readFileSync('.github/copilot-instructions.md', 'utf8');
             
-            // Get changed files with patches
+            // Get changed files
             const { data: files } = await github.rest.pulls.listFiles({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -46,59 +31,37 @@ jobs:
             });
             
             const filesToReview = files
-              .filter(file => file.patch && file.status !== 'removed')
-              .slice(0, MAX_FILES)
-              .map(file => ({
-                filename: file.filename,
-                patch: file.patch.length > MAX_DIFF_SIZE 
-                  ? file.patch.substring(0, MAX_DIFF_SIZE) + '\n... (truncated)'
-                  : file.patch
-              }));
+              .filter(f => f.patch && f.status !== 'removed')
+              .slice(0, 20);
             
-            console.log(`Reviewing ${filesToReview.length} files`);
-            
-            // Get existing review comments to avoid duplicates
-            const { data: existingComments } = await github.rest.pulls.listReviewComments({
+            // Delete old AI comments
+            const { data: comments } = await github.rest.pulls.listReviewComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: context.issue.number,
             });
             
-            // Filter out AI comments from previous runs
-            const aiComments = existingComments.filter(comment => 
-              comment.body.includes('🤖 AI Review')
-            );
-            
-            // Delete old AI comments
-            for (const comment of aiComments) {
-              try {
-                await github.rest.pulls.deleteReviewComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  comment_id: comment.id,
-                });
-              } catch (error) {
-                console.log(`Failed to delete comment: ${error.message}`);
-              }
+            for (const comment of comments.filter(c => c.body.includes('🤖 AI Review'))) {
+              await github.rest.pulls.deleteReviewComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: comment.id,
+              }).catch(() => {});
             }
             
-            // Review each file with Gemini and create inline comments
+            // Review each file
             for (const file of filesToReview) {
               try {
-                const basePrompt = `You are a strict senior code reviewer. Review this diff and return ONLY a compact JSON in this exact format:
-            {"findings":[{"severity":"nit|minor|major|security","title":"brief title","rationale":"why this matters","line_number":123,"suggestion_diff":"optional unified diff fix"}]}
+                const prompt = `You are a senior code reviewer. Follow these project rules strictly:
             
-            IMPORTANT: Include "line_number" for each finding - the line number in the new file where the issue is located.`;
-
-                const instructionsSection = projectInstructions ? 
-                  `\n\nPROJECT-SPECIFIC RULES TO ENFORCE:\n${projectInstructions}\n\nPay special attention to these project rules when reviewing. If any rule is violated, mark it as "major" or "security" severity and reference the specific rule number in your rationale.\n` : 
-                  '';
-
-                const prompt = `${basePrompt}${instructionsSection}
+            ${instructions}
+            
+            Review this diff and return ONLY JSON:
+            {"findings":[{"severity":"nit|minor|major|security","title":"brief title","rationale":"why + rule reference","line_number":123}]}
             
             File: ${file.filename}
             \`\`\`diff
-            ${file.patch}
+            ${file.patch.substring(0, 8000)}
             \`\`\``;
             
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
@@ -110,85 +73,32 @@ jobs:
                   })
                 });
             
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                
                 const data = await response.json();
-                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{"findings":[]}';
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+                const result = JSON.parse(text.match(/\{[\s\S]*\}/))?.[0] || { findings: [] };
                 
-                // Extract JSON from response
-                const jsonMatch = text.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                  const result = JSON.parse(jsonMatch[0]);
+                // Create comments
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                });
+                
+                for (const finding of result.findings || []) {
+                  const icons = { nit: '💡', minor: '⚠️', major: '🔴', security: '🛡️' };
+                  const body = `🤖 **AI Review** ${icons[finding.severity] || '📌'} **${finding.severity.toUpperCase()}**: ${finding.title}\n\n${finding.rationale}`;
                   
-                  // Create review comments for each finding
-                  for (const finding of result.findings || []) {
-                    const icon = {
-                      nit: '💡',
-                      minor: '⚠️', 
-                      major: '🔴',
-                      security: '🛡️'
-                    }[finding.severity] || '📌';
-                    
-                    let commentBody = `🤖 **AI Review** ${icon} **${finding.severity.toUpperCase()}**: ${finding.title}\n\n`;
-                    commentBody += `${finding.rationale}\n`;
-                    
-                    if (finding.suggestion_diff) {
-                      commentBody += `\n**Suggested fix:**\n\`\`\`diff\n${finding.suggestion_diff}\n\`\`\``;
-                    }
-                    
-                    // Add footer with project rules indicator
-                    if (projectInstructions) {
-                      commentBody += `\n\n*Reviewed against project-specific rules*`;
-                    }
-                    
-                    // Determine line number - use provided line_number or estimate from patch
-                    let lineNumber = finding.line_number;
-                    if (!lineNumber) {
-                      // Try to extract line number from patch (fallback)
-                      const lines = file.patch.split('\n');
-                      const addedLines = lines.filter(line => line.startsWith('+')).length;
-                      lineNumber = Math.max(1, Math.floor(addedLines / 2));
-                    }
-                    
-                    try {
-                      // Get the latest commit SHA
-                      const { data: pr } = await github.rest.pulls.get({
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        pull_number: context.issue.number,
-                      });
-                      
-                      await github.rest.pulls.createReviewComment({
-                        owner: context.repo.owner,
-                        repo: context.repo.repo,
-                        pull_number: context.issue.number,
-                        commit_id: pr.head.sha,
-                        path: file.filename,
-                        line: lineNumber,
-                        body: commentBody,
-                      });
-                      
-                      console.log(`Created comment for ${file.filename}:${lineNumber}`);
-                    } catch (commentError) {
-                      console.log(`Failed to create comment for ${file.filename}: ${commentError.message}`);
-                      
-                      // Fallback: create a general PR comment if inline comment fails
-                      try {
-                        await github.rest.issues.createComment({
-                          owner: context.repo.owner,
-                          repo: context.repo.repo,
-                          issue_number: context.issue.number,
-                          body: `${commentBody}\n\n**File:** \`${file.filename}\``,
-                        });
-                      } catch (fallbackError) {
-                        console.log(`Fallback comment also failed: ${fallbackError.message}`);
-                      }
-                    }
-                  }
+                  await github.rest.pulls.createReviewComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number,
+                    commit_id: pr.head.sha,
+                    path: file.filename,
+                    line: finding.line_number || 1,
+                    body,
+                  }).catch(() => {});
                 }
               } catch (error) {
-                console.log(`Skipping ${file.filename}: ${error.message}`);
+                console.log(`Skipped ${file.filename}: ${error.message}`);
               }
             }
-            
-            console.log(`AI review completed for ${filesToReview.length} files`);
