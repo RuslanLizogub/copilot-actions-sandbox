@@ -1,8 +1,6 @@
 import { expect } from 'chai';
 import { GeminiClient } from './clients/geminiClient';
-
-// INSERT YOUR API KEY HERE
-const GEMINI_API_KEY = 'INSERT_YOUR_GEMINI_API_KEY_HERE';
+import { GEMINI_API_KEY } from './api-keys';
 
 describe('Gemini AI', () => {
   const gemini = new GeminiClient(GEMINI_API_KEY);
