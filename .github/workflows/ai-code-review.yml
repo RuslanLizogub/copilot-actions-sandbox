@@ -18,7 +18,6 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           script: |
-            const COMMENT_SIGNATURE = '<!-- ai-review-gemini -->';
             const MAX_FILES = 20;
             const MAX_DIFF_SIZE = 12000;
             
@@ -41,12 +40,38 @@ jobs:
             
             console.log(`Reviewing ${filesToReview.length} files`);
             
-            // Review each file with Gemini
-            const allFindings = [];
+            // Get existing review comments to avoid duplicates
+            const { data: existingComments } = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
+            // Filter out AI comments from previous runs
+            const aiComments = existingComments.filter(comment => 
+              comment.body.includes('🤖 AI Review')
+            );
+            
+            // Delete old AI comments
+            for (const comment of aiComments) {
+              try {
+                await github.rest.pulls.deleteReviewComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+              } catch (error) {
+                console.log(`Failed to delete comment: ${error.message}`);
+              }
+            }
+            
+            // Review each file with Gemini and create inline comments
             for (const file of filesToReview) {
               try {
                 const prompt = `You are a strict senior code reviewer. Review this diff and return ONLY a compact JSON in this exact format:
-            {"findings":[{"severity":"nit|minor|major|security","title":"brief title","rationale":"why this matters","suggestion_diff":"optional unified diff fix"}]}
+            {"findings":[{"severity":"nit|minor|major|security","title":"brief title","rationale":"why this matters","line_number":123,"suggestion_diff":"optional unified diff fix"}]}
+            
+            IMPORTANT: Include "line_number" for each finding - the line number in the new file where the issue is located.
             
             File: ${file.filename}
             \`\`\`diff
@@ -71,8 +96,66 @@ jobs:
                 const jsonMatch = text.match(/\{[\s\S]*\}/);
                 if (jsonMatch) {
                   const result = JSON.parse(jsonMatch[0]);
-                  if (result.findings?.length > 0) {
-                    allFindings.push({ file: file.filename, findings: result.findings });
+                  
+                  // Create review comments for each finding
+                  for (const finding of result.findings || []) {
+                    const icon = {
+                      nit: '💡',
+                      minor: '⚠️', 
+                      major: '🔴',
+                      security: '🛡️'
+                    }[finding.severity] || '📌';
+                    
+                    let commentBody = `🤖 **AI Review** ${icon} **${finding.severity.toUpperCase()}**: ${finding.title}\n\n`;
+                    commentBody += `${finding.rationale}\n`;
+                    
+                    if (finding.suggestion_diff) {
+                      commentBody += `\n**Suggested fix:**\n\`\`\`diff\n${finding.suggestion_diff}\n\`\`\``;
+                    }
+                    
+                    // Determine line number - use provided line_number or estimate from patch
+                    let lineNumber = finding.line_number;
+                    if (!lineNumber) {
+                      // Try to extract line number from patch (fallback)
+                      const lines = file.patch.split('\n');
+                      const addedLines = lines.filter(line => line.startsWith('+')).length;
+                      lineNumber = Math.max(1, Math.floor(addedLines / 2));
+                    }
+                    
+                    try {
+                      // Get the latest commit SHA
+                      const { data: pr } = await github.rest.pulls.get({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.issue.number,
+                      });
+                      
+                      await github.rest.pulls.createReviewComment({
+                        owner: context.repo.owner,
+                        repo: context.repo.repo,
+                        pull_number: context.issue.number,
+                        commit_id: pr.head.sha,
+                        path: file.filename,
+                        line: lineNumber,
+                        body: commentBody,
+                      });
+                      
+                      console.log(`Created comment for ${file.filename}:${lineNumber}`);
+                    } catch (commentError) {
+                      console.log(`Failed to create comment for ${file.filename}: ${commentError.message}`);
+                      
+                      // Fallback: create a general PR comment if inline comment fails
+                      try {
+                        await github.rest.issues.createComment({
+                          owner: context.repo.owner,
+                          repo: context.repo.repo,
+                          issue_number: context.issue.number,
+                          body: `${commentBody}\n\n**File:** \`${file.filename}\``,
+                        });
+                      } catch (fallbackError) {
+                        console.log(`Fallback comment also failed: ${fallbackError.message}`);
+                      }
+                    }
                   }
                 }
               } catch (error) {
@@ -80,59 +163,4 @@ jobs:
               }
             }
             
-            // Generate markdown report
-            const timestamp = new Date().toISOString();
-            let markdown = `${COMMENT_SIGNATURE}\n# 🤖 AI Code Review\n\n`;
-            markdown += `**Model:** gemini-2.0-flash | **Files reviewed:** ${filesToReview.length} | **Time:** ${timestamp}\n\n`;
-            
-            if (allFindings.length === 0) {
-              markdown += '✅ No issues found in the reviewed files.';
-            } else {
-              for (const { file, findings } of allFindings) {
-                markdown += `## 📁 \`${file}\`\n\n`;
-                for (const finding of findings) {
-                  const icon = {
-                    nit: '💡',
-                    minor: '⚠️', 
-                    major: '🔴',
-                    security: '🛡️'
-                  }[finding.severity] || '📌';
-                  
-                  markdown += `${icon} **${finding.severity.toUpperCase()}**: ${finding.title}\n`;
-                  markdown += `${finding.rationale}\n`;
-                  
-                  if (finding.suggestion_diff) {
-                    markdown += `\`\`\`diff\n${finding.suggestion_diff}\n\`\`\`\n`;
-                  }
-                  markdown += '\n';
-                }
-              }
-            }
-            
-            // Find existing comment
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            
-            const existingComment = comments.find(comment => 
-              comment.body.includes(COMMENT_SIGNATURE)
-            );
-            
-            // Create or update comment
-            if (existingComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existingComment.id,
-                body: markdown,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: markdown,
-              });
-            }
+            console.log(`AI review completed for ${filesToReview.length} files`);
