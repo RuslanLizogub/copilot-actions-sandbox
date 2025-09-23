@@ -4,7 +4,6 @@
   "main": "index.js",
   "scripts": {
     "test": "mocha -r ts-node/register --recursive \"**/*.spec.ts\"",
-    "test:gemini": "mocha -r ts-node/register \"test/gemini-ai.spec.ts\"",
     "lint": "eslint . --ext .ts"
   },
   "devDependencies": {
