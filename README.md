@@ -20,7 +20,7 @@ Advanced GitHub Actions workflow for automated code review using Google Gemini A
 Edit `.github/workflows/ai-code-review.yml`:
 ```yaml
 env:
-  MODEL_CHOICE: 2          # Change this number (1-13, see models below)
+  MODEL_CHOICE: 1          # Default: gemini-2.5-pro (1-13, see models below)
   TEMPERATURE: 0           # AI creativity: 0=deterministic, 1=creative
   MAX_FILES: 20            # Maximum files to review per PR
   MAX_DIFF_SIZE: 8000      # Maximum characters per file diff
@@ -75,8 +75,8 @@ Create `.github/copilot-instructions.md` with your project rules:
 
 | # | Model | Description | Best For |
 |---|-------|-------------|----------|
-| 1 | `gemini-2.5-pro` | Highest quality | Complex analysis |
-| 2 | `gemini-2.5-flash` ⭐ | **RECOMMENDED** | Daily reviews |
+| 1 | `gemini-2.5-pro` ⭐ | **DEFAULT** Highest quality | Complex analysis, best reviews |
+| 2 | `gemini-2.5-flash` | Fast & efficient | Daily reviews, speed |
 | 3 | `gemini-2.5-flash-lite` | Lightweight | High volume |
 | 4 | `gemini-2.0-flash` | Advanced features | Modern codebases |
 | 5 | `gemini-2.0-flash-lite` | High frequency | Active repos |

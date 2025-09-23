@@ -6,10 +6,10 @@
 # 3. Create .github/copilot-instructions.md with your project rules
 #
 # ⚡ QUICK MODEL SELECTION - Change this number (1-13):
-# 1=2.5-pro 2=2.5-flash⭐ 3=2.5-flash-lite 4=2.0-flash 5=2.0-flash-lite
+# 1=2.5-pro⭐ 2=2.5-flash 3=2.5-flash-lite 4=2.0-flash 5=2.0-flash-lite
 # 6=2.5-live 7=2.0-live 8=TTS 9=image-gen 10=gemma 11=embedding 12=1.5-flash 13=1.5-flash-8b
 env:
-  MODEL_CHOICE: 2           # ⬅️ CHANGE THIS NUMBER (1-13)
+  MODEL_CHOICE: 1           # ⬅️ CHANGE THIS NUMBER (1-13) - Default: gemini-2.5-pro (best quality)
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # 🔑 Set this in repo secrets!
   
   # 🎛️ AI BEHAVIOR SETTINGS
@@ -22,8 +22,8 @@ env:
 # 📊 COMPLETE FREE TIER LIMITS (RPM=Per Minute, RPH=Per Hour, RPD=Per Day, TPM=Tokens Per Minute):
 #
 # 🏆 TEXT-OUT MODELS (Best for code review):
-# 1. gemini-2.5-pro         | 5 RPM, 300 RPH, 100 RPD   | 250K TPM | Highest quality
-# 2. gemini-2.5-flash    ⭐ | 10 RPM, 600 RPH, 250 RPD  | 250K TPM | RECOMMENDED - Fast & efficient
+# 1. gemini-2.5-pro      ⭐ | 5 RPM, 300 RPH, 100 RPD   | 250K TPM | DEFAULT - Highest quality
+# 2. gemini-2.5-flash       | 10 RPM, 600 RPH, 250 RPD  | 250K TPM | Fast & efficient alternative
 # 3. gemini-2.5-flash-lite  | 15 RPM, 900 RPH, 1K RPD   | 250K TPM | Lightweight, high volume
 # 4. gemini-2.0-flash       | 15 RPM, 900 RPH, 200 RPD  | 1M TPM   | Advanced features
 # 5. gemini-2.0-flash-lite  | 30 RPM, 1.8K RPH, 200 RPD | 1M TPM   | High frequency
@@ -86,13 +86,13 @@ jobs:
             };
             
             // Model Selection - Get from environment variable
-            const MODEL_CHOICE = parseInt(process.env.MODEL_CHOICE) || 2;
+            const MODEL_CHOICE = parseInt(process.env.MODEL_CHOICE) || 1;
             
             // Get selected model (for fallback priority)
             let selectedModel = AVAILABLE_MODELS[MODEL_CHOICE];
             if (!selectedModel) {
               console.log(`Error: Invalid model choice ${MODEL_CHOICE}. Using default model.`);
-              selectedModel = MODELS_BY_PRIORITY[1]; // Default to gemini-2.5-flash
+              selectedModel = MODELS_BY_PRIORITY[0]; // Default to gemini-2.5-pro
             }
             
             // Function to try AI request with fallback
