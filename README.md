@@ -20,7 +20,10 @@ Advanced GitHub Actions workflow for automated code review using Google Gemini A
 Edit `.github/workflows/ai-code-review.yml`:
 ```yaml
 env:
-  MODEL_CHOICE: 2  # Change this number (1-13, see models below)
+  MODEL_CHOICE: 2          # Change this number (1-13, see models below)
+  TEMPERATURE: 0           # AI creativity: 0=deterministic, 1=creative
+  MAX_FILES: 20            # Maximum files to review per PR
+  MAX_DIFF_SIZE: 8000      # Maximum characters per file diff
 ```
 
 ### 4. Create Project Rules
@@ -119,14 +122,33 @@ graph TD
 
 ## 🛠️ Customization
 
-### Change Model Priority
-Edit the workflow to reorder `MODELS_BY_PRIORITY` array.
+### Configuration Parameters
+All settings are in `.github/workflows/ai-code-review.yml` env section:
 
-### Adjust Limits
 ```yaml
-MAX_FILES: 20        # Files to review per PR
-MAX_DIFF_SIZE: 8000  # Characters per file diff
+env:
+  # Model Selection
+  MODEL_CHOICE: 2          # Which model to prefer (1-13)
+  
+  # AI Behavior  
+  TEMPERATURE: 0           # Creativity level (0-1)
+                          # 0 = Deterministic, consistent results
+                          # 0.3 = Slightly varied, good balance  
+                          # 1 = Creative, unpredictable
+                          # 🎯 RECOMMENDED: 0 for code reviews
+  
+  # Review Scope Limits
+  MAX_FILES: 20           # Maximum files to review per PR
+                         # Higher = more thorough but uses more tokens
+                         # 🎯 RECOMMENDED: 10-20 for most repos
+                         
+  MAX_DIFF_SIZE: 8000    # Maximum characters per file diff
+                        # Larger diffs = more context but more tokens
+                        # 🎯 RECOMMENDED: 5000-10000 characters
 ```
+
+### Model Priority Customization
+Edit the workflow to reorder `MODELS_BY_PRIORITY` array for different fallback order.
 
 ### Rule Severity
 - **Architecture violations** → 🛡️ Security
@@ -168,14 +190,28 @@ import { getUserData } from '/packages/data/users';
 - Wait for limits to reset (hourly/daily)
 - Consider upgrading to paid tier
 
+**Reviews taking too long?**
+- Reduce `MAX_FILES` (try 10 instead of 20)
+- Reduce `MAX_DIFF_SIZE` (try 5000 instead of 8000)
+- Use faster model like #2 (gemini-2.5-flash)
+
+**Inconsistent AI responses?**
+- Lower `TEMPERATURE` to 0 for deterministic results
+- Higher TEMPERATURE (0.3-0.7) for more creative suggestions
+- Never use TEMPERATURE > 0.5 for code reviews
+
 **Too many generic comments?**
 - Update your `.github/copilot-instructions.md` to be more specific
 - AI only comments on violations of YOUR documented rules
 
+**Token usage too high?**
+- Smaller `MAX_DIFF_SIZE` = fewer tokens per file
+- Fewer `MAX_FILES` = fewer tokens per PR
+- Monitor token usage in comment signatures
+
 ---
 
 *🔥 Built with GitHub Actions + Google Gemini AI*
-	 curl -o actions-runner-linux-x64-2.316.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.316.0/actions-runner-linux-x64-2.316.0.tar.gz
 	 tar xzf ./actions-runner-linux-x64-2.316.0.tar.gz
 	 # Configure
 	 ./config.sh --url https://github.com/<owner>/<repo> --token <TOKEN>
