@@ -128,24 +128,105 @@ jobs:
                   // Debug: Log full response structure for thinking tokens investigation
                   console.log('🔍 Full API response structure:', JSON.stringify(data, null, 2));
                   
-                  // Extract token usage information - try multiple possible fields
+                  // Extract token usage from multiple possible locations
                   const usageMeta = data.usageMetadata || {};
+                  const candidates = data.candidates || [];
+                  const firstCandidate = candidates[0] || {};
+                  
+                  // Check all possible locations for thinking tokens
+                  console.log('🔍 Checking usageMetadata:', Object.keys(usageMeta));
+                  console.log('🔍 Checking candidates structure:', Object.keys(firstCandidate));
+                  console.log('🔍 First candidate content:', firstCandidate.content ? Object.keys(firstCandidate.content) : 'no content');
+                  
+                  // Look for thinking tokens in multiple places
+                  let thinkingTokens = 0;
+                  
+                  // Method 1: usageMetadata
+                  thinkingTokens = usageMeta.thinkingTokenCount || 
+                                  usageMeta.cachedContentTokenCount || 
+                                  usageMeta.reasoningTokenCount || 
+                                  usageMeta.thoughtTokenCount || 0;
+                  
+                  // Method 2: Check candidates for thinking info
+                  if (thinkingTokens === 0 && firstCandidate.usageMetadata) {
+                    const candidateUsage = firstCandidate.usageMetadata;
+                    console.log('🔍 Candidate usageMetadata:', Object.keys(candidateUsage));
+                    thinkingTokens = candidateUsage.thinkingTokenCount || 
+                                    candidateUsage.reasoningTokenCount || 0;
+                  }
+                  
+                  // Method 3: Check for any field containing "thinking" or "reasoning"
+                  if (thinkingTokens === 0) {
+                    const allKeys = [
+                      ...Object.keys(usageMeta),
+                      ...(firstCandidate.usageMetadata ? Object.keys(firstCandidate.usageMetadata) : [])
+                    ];
+                    const thinkingKey = allKeys.find(key => 
+                      key.toLowerCase().includes('thinking') || 
+                      key.toLowerCase().includes('reasoning') || 
+                      key.toLowerCase().includes('thought')
+                    );
+                    if (thinkingKey) {
+                      thinkingTokens = usageMeta[thinkingKey] || (firstCandidate.usageMetadata && firstCandidate.usageMetadata[thinkingKey]) || 0;
+                      console.log(`🔍 Found thinking tokens in field: ${thinkingKey} = ${thinkingTokens}`);
+                    }
+                  }
+                  
                   const tokenUsage = {
                     inputTokens: usageMeta.promptTokenCount || 0,
                     outputTokens: usageMeta.candidatesTokenCount || 0,
-                    thinkingTokens: usageMeta.thinkingTokenCount || usageMeta.cachedContentTokenCount || 0,
+                    thinkingTokens: thinkingTokens,
                     totalTokens: usageMeta.totalTokenCount || 0
                   };
                   
-                  // Debug: Show what fields are available
+                  // Debug: Show what fields are available and their values
                   console.log('🔍 Available usage metadata fields:', Object.keys(usageMeta));
-                  console.log('🔍 Raw token values:', tokenUsage);
+                  console.log('🔍 All usageMetadata values:', usageMeta);
+                  console.log('🔍 Raw token values extracted:', tokenUsage);
                   
-                  // Calculate corrected total if thinking tokens are present
+                  // Look for any unexplained difference in total
+                  const inputOutput = tokenUsage.inputTokens + tokenUsage.outputTokens;
+                  const withThinking = inputOutput + tokenUsage.thinkingTokens;
+                  const unexplained = tokenUsage.totalTokens - withThinking;
+                  
+                  if (unexplained > 1) {
+                    console.log(`🔍 UNEXPLAINED TOKENS: ${unexplained} tokens not accounted for!`);
+                    console.log(`🔍 Breakdown: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output + ${tokenUsage.thinkingTokens} thinking = ${withThinking}, but total = ${tokenUsage.totalTokens}`);
+                    
+                    // Search for any numeric field that might contain the missing tokens
+                    for (const [key, value] of Object.entries(usageMeta)) {
+                      if (typeof value === 'number' && value > 0 && !['promptTokenCount', 'candidatesTokenCount', 'totalTokenCount'].includes(key)) {
+                        console.log(`🔍 Other numeric field found: ${key} = ${value}`);
+                      }
+                    }
+                  }
+                  
+                  // Calculate corrected total if thinking tokens are present or math doesn't match
                   const calculatedTotal = tokenUsage.inputTokens + tokenUsage.outputTokens + tokenUsage.thinkingTokens;
-                  if (Math.abs(calculatedTotal - tokenUsage.totalTokens) > 1) {
-                    console.log(`🔍 Math mismatch: ${calculatedTotal} calculated vs ${tokenUsage.totalTokens} reported`);
-                    tokenUsage.correctedTotal = calculatedTotal;
+                  const hasDiscrepancy = Math.abs(calculatedTotal - tokenUsage.totalTokens) > 1;
+                  
+                  if (hasDiscrepancy) {
+                    console.log(`🔍 MATH MISMATCH: ${calculatedTotal} calculated vs ${tokenUsage.totalTokens} reported (diff: ${tokenUsage.totalTokens - calculatedTotal})`);
+                    
+                    // Try to find the missing tokens by checking if any field contains the difference
+                    const difference = tokenUsage.totalTokens - calculatedTotal;
+                    if (difference > 0) {
+                      console.log(`🔍 Looking for ${difference} missing tokens in API response...`);
+                      
+                      // Check all numeric fields for potential matches
+                      for (const [key, value] of Object.entries(usageMeta)) {
+                        if (typeof value === 'number' && Math.abs(value - difference) <= 1) {
+                          console.log(`🔍 POTENTIAL MATCH: ${key} = ${value} (close to missing ${difference})`);
+                          if (!['promptTokenCount', 'candidatesTokenCount', 'totalTokenCount', 'thinkingTokenCount', 'cachedContentTokenCount'].includes(key)) {
+                            console.log(`🔍 Using ${key} as additional tokens`);
+                            tokenUsage.additionalTokens = value;
+                            tokenUsage.additionalTokenField = key;
+                          }
+                        }
+                      }
+                    }
+                    
+                    tokenUsage.correctedTotal = calculatedTotal + (tokenUsage.additionalTokens || 0);
                   }
                   
                   console.log(`✅ Success with ${model.name} for ${fileName}`);
@@ -311,11 +392,22 @@ jobs:
                   
                   // Add token usage with thinking tokens if present
                   const hasThinking = tokenUsage.thinkingTokens > 0;
+                  const hasAdditional = tokenUsage.additionalTokens > 0;
                   const displayTotal = tokenUsage.correctedTotal || tokenUsage.totalTokens;
                   
-                  if (hasThinking) {
-                    body += `\n*📊 Token usage: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output + ${tokenUsage.thinkingTokens} thinking = **${displayTotal} total***`;
-                    if (tokenUsage.correctedTotal) {
+                  if (hasThinking || hasAdditional) {
+                    let tokenBreakdown = `${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output`;
+                    if (hasThinking) {
+                      tokenBreakdown += ` + ${tokenUsage.thinkingTokens} thinking`;
+                    }
+                    if (hasAdditional) {
+                      tokenBreakdown += ` + ${tokenUsage.additionalTokens} ${tokenUsage.additionalTokenField}`;
+                    }
+                    tokenBreakdown += ` = **${displayTotal} total**`;
+                    
+                    body += `\n*📊 Token usage: ${tokenBreakdown}*`;
+                    
+                    if (tokenUsage.correctedTotal && Math.abs(tokenUsage.correctedTotal - tokenUsage.totalTokens) > 1) {
                       body += `\n*⚠️ Note: API reported ${tokenUsage.totalTokens}, calculated ${tokenUsage.correctedTotal}*`;
                     }
                   } else {
@@ -323,6 +415,7 @@ jobs:
                     const simpleTotal = tokenUsage.inputTokens + tokenUsage.outputTokens;
                     if (Math.abs(simpleTotal - tokenUsage.totalTokens) > 1) {
                       body += `\n*📊 Token usage: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output = **${simpleTotal} calculated** (API: ${tokenUsage.totalTokens})*`;
+                      body += `\n*⚠️ Mathematical discrepancy detected - investigating token fields*`;
                     } else {
                       body += `\n*📊 Token usage: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output = **${tokenUsage.totalTokens} total***`;
                     }
