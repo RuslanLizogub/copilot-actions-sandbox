@@ -77,9 +77,18 @@ jobs:
             - ALWAYS reference the specific rule number in rationale (e.g. "Rule 1", "Rule 3")
             - If you see word "BANANA" anywhere, write "INSTRUCTIONS PICKED UP" in rationale
             - Mark architecture violations as "security" severity
+            - For code issues, provide EXACT code fix in "suggested_code" field
+            - "suggested_code" should contain ONLY the corrected lines (no line numbers, no diff markers)
+            - Use "start_line" and "end_line" for multi-line changes
+            - For warnings/notifications only, set "suggested_code" to null
+            
+            EXAMPLES:
+            - Single line fix: {"line_number": 5, "suggested_code": "const result = await api.getData();"}
+            - Multi-line fix: {"start_line": 10, "end_line": 12, "suggested_code": "if (user) {\n  return user.name;\n}"}
+            - Warning only: {"line_number": 8, "suggested_code": null}
             
             Return ONLY this JSON format:
-            {"findings":[{"severity":"nit|minor|major|security","title":"brief title","rationale":"explanation + rule reference","line_number":123}]}
+            {"findings":[{"severity":"nit|minor|major|security","title":"brief title","rationale":"explanation + rule reference","line_number":123,"suggested_code":"exact replacement code or null","start_line":123,"end_line":125}]}
             
             File: ${file.filename}
             \`\`\`diff
@@ -115,17 +124,33 @@ jobs:
                 
                 for (const finding of result.findings || []) {
                   const icons = { nit: '💡', minor: '⚠️', major: '🔴', security: '🛡️' };
-                  const body = `🤖 **AI Review** ${icons[finding.severity] || '📌'} **${finding.severity.toUpperCase()}**: ${finding.title}\n\n${finding.rationale}`;
+                  let body = `🤖 **AI Review** ${icons[finding.severity] || '📌'} **${finding.severity.toUpperCase()}**: ${finding.title}\n\n${finding.rationale}`;
                   
-                  await github.rest.pulls.createReviewComment({
+                  // Add suggested code change if provided
+                  if (finding.suggested_code) {
+                    body += `\n\n**Suggested fix:**\n\`\`\`suggestion\n${finding.suggested_code}\n\`\`\``;
+                  }
+                  
+                  const commentParams = {
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     pull_number: context.issue.number,
                     commit_id: pr.head.sha,
                     path: file.filename,
-                    line: finding.line_number || 1,
                     body,
-                  }).catch(() => {});
+                  };
+                  
+                  // Use start_line and end_line for multi-line suggestions if provided
+                  if (finding.start_line && finding.end_line && finding.start_line !== finding.end_line) {
+                    commentParams.start_line = finding.start_line;
+                    commentParams.line = finding.end_line;
+                    commentParams.start_side = 'RIGHT';
+                    commentParams.side = 'RIGHT';
+                  } else {
+                    commentParams.line = finding.line_number || 1;
+                  }
+                  
+                  await github.rest.pulls.createReviewComment(commentParams).catch(() => {});
                 }
               } catch (error) {
                 console.log(`Skipped ${file.filename}: ${error.message}`);
