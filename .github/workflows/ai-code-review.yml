@@ -148,9 +148,13 @@ jobs:
             let instructions = '';
             try {
               instructions = fs.readFileSync('.github/copilot-instructions.md', 'utf8');
-              console.log('Loaded copilot instructions:', instructions.substring(0, 100) + '...');
+              console.log('✅ Loaded copilot instructions successfully');
+              console.log('📋 Instructions content:');
+              console.log(instructions);
+              console.log('📋 Instructions loaded, length:', instructions.length);
             } catch (error) {
-              console.log('ERROR: Could not load .github/copilot-instructions.md');
+              console.log('❌ ERROR: Could not load .github/copilot-instructions.md');
+              console.log('Error details:', error.message);
               return;
             }
             
@@ -190,24 +194,32 @@ jobs:
             === END PROJECT RULES ===
 
             CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:
-            - ONLY create findings for violations of the specific project rules above
-            - DO NOT create general code style, performance, or best practice comments
-            - ALWAYS reference the exact rule number in rationale (e.g. "Violates Rule 1", "Rule 3 violation")
-            - If you see word "BANANA" anywhere, write "INSTRUCTIONS PICKED UP" in rationale
+            - Check EVERY rule and instruction from the project rules above
+            - Create findings for violations of the specific project rules above
+            - ALSO follow ALL special instructions from the project rules (e.g., BANANA test, blocking comments, etc.)
+            - DO NOT create general code style, performance, or best practice comments UNLESS they violate project rules
+            - ALWAYS reference the exact rule number in rationale (e.g. "Violates Rule 1", "Rule 3 violation")  
+            - If you see word "BANANA" anywhere in code, write "INSTRUCTIONS PICKED UP" in rationale
             - Architecture violations (Rule 1, Rule 2) = "security" severity
             - Security violations (Rule 3) = "security" severity  
             - Style violations (Rule 4) = "major" severity
             - Documentation violations (Rule 5) = "major" severity
-            - If NO project rules are violated, return empty findings array: {"findings":[]}
+            - If NO project rules are violated AND no special instructions triggered, return empty findings array: {"findings":[]}
             - For code fixes, provide EXACT replacement in "suggested_code"
             - "suggested_code" should contain ONLY the corrected lines (no line numbers, no diff markers)
             - Use "start_line" and "end_line" for multi-line changes
             - For warnings/notifications only, set "suggested_code" to null
             
+            SPECIAL INSTRUCTIONS FROM PROJECT RULES:
+            - BANANA test: If word "BANANA" appears anywhere in the code changes, create a finding with "INSTRUCTIONS PICKED UP" in rationale
+            - New top-level folders: Check if new top-level folders are created (except .github, test, test2, api) - this violates architecture rules
+            - Blocking comments: Mark rule violations as "blocking" when specified in project rules
+            
             EXAMPLES:
             - Single line fix: {"line_number": 5, "suggested_code": "const result = await api.getData();"}
             - Multi-line fix: {"start_line": 10, "end_line": 12, "suggested_code": "if (user) {\n  return user.name;\n}"}
             - Warning only: {"line_number": 8, "suggested_code": null}
+            - BANANA test: {"line_number": 15, "suggested_code": null, "title": "Test instruction triggered", "rationale": "INSTRUCTIONS PICKED UP - detected BANANA in code"}
             
             Return ONLY this JSON format:
             {"findings":[{"severity":"major|security","title":"brief title","rationale":"explanation + exact rule reference","rule_violated":"Rule X","line_number":123,"suggested_code":"exact replacement code or null","start_line":123,"end_line":125}]}

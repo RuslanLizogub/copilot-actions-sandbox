@@ -3,7 +3,7 @@ import { JsonPlaceholderClient } from './clients/jsonPlaceholderClient';
 
 const jsonPlaceholder = new JsonPlaceholderClient();
 
-describe('User CRUD', () => {
+describe('User CRUD and BANANA', () => {
   it('should create a user', async () => {
     const res = await jsonPlaceholder.createUser({ name: 'Test User' });
     expect(res.status).to.equal(201);
@@ -11,7 +11,7 @@ describe('User CRUD', () => {
   });
 });
 
-describe('Document CRUD and BANANA', () => {
+describe('Document CRUD', () => {
   it('should get a document', async () => {
     const res = await jsonPlaceholder.getPost(1);
     expect(res.status).to.equal(200);
