@@ -1,3 +1,41 @@
+# AI Code Review with ALL Google Gemini Models
+#
+# 🔧 SETUP REQUIRED:
+# 1. Set GEMINI_API_KEY in GitHub repository secrets (Settings → Secrets and variables → Actions)
+# 2. Get your API key from: https://aistudio.google.com/app/apikey
+#
+# ⚡ QUICK MODEL SELECTION - Change this number (1-13):
+# 1=2.5-pro 2=2.5-flash⭐ 3=2.5-flash-lite 4=2.0-flash 5=2.0-flash-lite
+# 6=2.5-live 7=2.0-live 8=TTS 9=image-gen 10=gemma 11=embedding 12=1.5-flash 13=1.5-flash-8b
+env:
+  MODEL_CHOICE: 2           # ⬅️ CHANGE THIS NUMBER (1-13)
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # 🔑 Set this in repo secrets!
+
+# 📊 COMPLETE FREE TIER LIMITS (RPM=Per Minute, RPH=Per Hour, RPD=Per Day, TPM=Tokens Per Minute):
+#
+# 🏆 TEXT-OUT MODELS (Best for code review):
+# 1. gemini-2.5-pro         | 5 RPM, 300 RPH, 100 RPD   | 250K TPM | Highest quality
+# 2. gemini-2.5-flash    ⭐ | 10 RPM, 600 RPH, 250 RPD  | 250K TPM | RECOMMENDED - Fast & efficient
+# 3. gemini-2.5-flash-lite  | 15 RPM, 900 RPH, 1K RPD   | 250K TPM | Lightweight, high volume
+# 4. gemini-2.0-flash       | 15 RPM, 900 RPH, 200 RPD  | 1M TPM   | Advanced features
+# 5. gemini-2.0-flash-lite  | 30 RPM, 1.8K RPH, 200 RPD | 1M TPM   | High frequency
+#
+# 🔴 LIVE API MODELS (Streaming):
+# 6. gemini-2.5-flash-live  | 3 sessions max | 1M TPM | Real-time analysis
+# 7. gemini-2.0-flash-live  | 3 sessions max | 1M TPM | Live streaming 2.0
+#
+# 🎨 MULTI-MODAL MODELS:
+# 8. gemini-2.5-flash-preview-tts           | 3 RPM, 180 RPH, 15 RPD    | 10K TPM  | Text-to-Speech
+# 9. gemini-2.0-flash-preview-image-gen     | 10 RPM, 600 RPH, 100 RPD  | 200K TPM | Image generation
+#
+# 🔧 OTHER MODELS:
+# 10. gemma-3-8b           | 30 RPM, 1.8K RPH, 14.4K RPD | 15K TPM  | Open source
+# 11. text-embedding-004   | 100 RPM, 6K RPH, 1K RPD     | 30K TPM  | Embeddings/search
+#
+# 📦 LEGACY MODELS (Deprecated but available):
+# 12. gemini-1.5-flash     | 15 RPM, 900 RPH, 50 RPD     | 250K TPM | Stable legacy
+# 13. gemini-1.5-flash-8b  | 15 RPM, 900 RPH, 50 RPD     | 250K TPM | Lightweight legacy
+
 name: AI Code Review
 
 on:
@@ -14,17 +52,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/github-script@v7
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         with:
           script: |
             const fs = require('fs');
             
-            // Configuration
-            const AI_MODEL = 'gemini-2.0-flash';
+            // Configuration - All Available Google AI Models (see limits above)
+            const AVAILABLE_MODELS = {
+              1: { name: 'gemini-2.5-pro', desc: 'Highest quality' },
+              2: { name: 'gemini-2.5-flash', desc: 'Fast & efficient' },
+              3: { name: 'gemini-2.5-flash-lite', desc: 'Lightweight' },
+              4: { name: 'gemini-2.0-flash', desc: 'Advanced features' },
+              5: { name: 'gemini-2.0-flash-lite', desc: 'High frequency' },
+              6: { name: 'gemini-2.5-flash-live', desc: 'Live streaming' },
+              7: { name: 'gemini-2.0-flash-live', desc: 'Live 2.0' },
+              8: { name: 'gemini-2.5-flash-preview-tts', desc: 'Text-to-Speech' },
+              9: { name: 'gemini-2.0-flash-preview-image-generation', desc: 'Image generation' },
+              10: { name: 'gemma-3-8b', desc: 'Open source' },
+              11: { name: 'text-embedding-004', desc: 'Embeddings' },
+              12: { name: 'gemini-1.5-flash', desc: 'Legacy stable' },
+              13: { name: 'gemini-1.5-flash-8b', desc: 'Legacy lightweight' }
+            };
+            
+            // Model Selection - Get from environment variable
+            const MODEL_CHOICE = parseInt(process.env.MODEL_CHOICE) || 2;
+            
+            // Get selected model
+            const selectedModel = AVAILABLE_MODELS[MODEL_CHOICE];
+            if (!selectedModel) {
+              console.log(`Error: Invalid model choice ${MODEL_CHOICE}. Available: 1-13`);
+              return;
+            }
+            
+            const AI_MODEL = selectedModel.name;
             const TEMPERATURE = 0;
             const MAX_FILES = 20;
             const MAX_DIFF_SIZE = 8000;
+            
+            console.log(`Using ${selectedModel.name} (${selectedModel.desc})`);
             
             // Load project instructions - fail if not found
             let instructions = '';
@@ -95,7 +159,7 @@ jobs:
             ${file.patch.substring(0, MAX_DIFF_SIZE)}
             \`\`\``;
             
-                console.log(`Reviewing ${file.filename} with ${AI_MODEL} (temp: ${TEMPERATURE})`);
+                console.log(`Reviewing ${file.filename} with ${AI_MODEL} (Choice: ${MODEL_CHOICE}, Temp: ${TEMPERATURE})`);
                 
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
                   method: 'POST',
@@ -130,6 +194,9 @@ jobs:
                   if (finding.suggested_code) {
                     body += `\n\n**Suggested fix:**\n\`\`\`suggestion\n${finding.suggested_code}\n\`\`\``;
                   }
+                  
+                  // Add model signature
+                  body += `\n\n---\n*🔮 Generated by: **${AI_MODEL}** (Model ${MODEL_CHOICE})*`;
                   
                   const commentParams = {
                     owner: context.repo.owner,
