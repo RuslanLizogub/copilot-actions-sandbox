@@ -228,8 +228,9 @@ Direct access to database bypasses our data layer abstraction...
 **Understanding token breakdown:**
 - **Input tokens** = your prompt + code + instructions
 - **Output tokens** = AI's response (comments, suggestions)
-- **Thinking tokens** = AI's internal reasoning (only on advanced models)
+- **Thinking tokens** = AI's internal reasoning (only on advanced models like 2.5-pro)
 - **Total** = sum of all token types used
+- **Note**: Sometimes API math differs from calculated total - we show both values for transparency
 
 ---
 
