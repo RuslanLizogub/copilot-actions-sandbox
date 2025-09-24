@@ -11,7 +11,7 @@ jobs:
         uses: actions/checkout@v5
       - name: Install dependencies
         run: npm ci
-      - name: Npm run ESLint
+      - name: Run ESLint
         run: npm run lint
   test:
     needs: [lint]
@@ -29,7 +29,7 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - name: Install dependencies
         run: npm ci
-      - name: Npm run tests
+      - name: Run tests
         run: npm test
   secret:
     runs-on: ubuntu-latest

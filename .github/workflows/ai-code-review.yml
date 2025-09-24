@@ -3,7 +3,7 @@
 # 🔧 SETUP REQUIRED:
 # 1. Set GEMINI_API_KEY in GitHub repository secrets (Settings → Secrets and variables → Actions)
 # 2. Get your API key from: https://aistudio.google.com/app/apikey
-# 3. Create .github/copilot-instructions.md with your project rules
+# 3. Create project rules file (default: .github/copilot-instructions.md) - path configurable via INSTRUCTIONS_FILE
 #
 # ⚡ QUICK MODEL SELECTION - Change this number (1-13):
 # 1=2.5-pro⭐ 2=2.5-flash 3=2.5-flash-lite 4=2.0-flash 5=2.0-flash-lite
@@ -11,6 +11,9 @@
 env:
   MODEL_CHOICE: 1           # ⬅️ CHANGE THIS NUMBER (1-13) - Default: gemini-2.5-pro (best quality)
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # 🔑 Set this in repo secrets!
+  
+  # 📋 PROJECT INSTRUCTIONS FILE
+  INSTRUCTIONS_FILE: '.github/copilot-instructions.md'  # ⬅️ Path to project rules file
   
   # 🎛️ AI BEHAVIOR SETTINGS
   TEMPERATURE: 0            # ⬅️ 0=deterministic, 1=creative (0-1, recommended: 0 for code review)
@@ -252,7 +255,7 @@ jobs:
                 }
               }
               
-              throw new Error('🚫 All models exhausted - Free tier limits reached for all available models');
+              throw new Error('🚫 All models exhausted - free tier limits reached for all available models');
             }
             
             // Configuration from environment variables
@@ -265,15 +268,16 @@ jobs:
             console.log(`Starting review with priority model: ${selectedModel.name} (${selectedModel.desc})`);
             
             // Load project instructions - fail if not found
+            const INSTRUCTIONS_FILE = process.env.INSTRUCTIONS_FILE || '.github/copilot-instructions.md';
             let instructions = '';
             try {
-              instructions = fs.readFileSync('.github/copilot-instructions.md', 'utf8');
-              console.log('✅ Loaded copilot instructions successfully');
+              instructions = fs.readFileSync(INSTRUCTIONS_FILE, 'utf8');
+              console.log(`✅ Loaded instructions from ${INSTRUCTIONS_FILE} successfully`);
               console.log('📋 Instructions content:');
               console.log(instructions);
               console.log('📋 Instructions loaded, length:', instructions.length);
             } catch (error) {
-              console.log('❌ ERROR: Could not load .github/copilot-instructions.md');
+              console.log(`❌ ERROR: Could not load ${INSTRUCTIONS_FILE}`);
               console.log('Error details:', error.message);
               return;
             }
@@ -307,42 +311,22 @@ jobs:
             // Review each file
             for (const file of filesToReview) {
               try {
-                const prompt = `You are a strict senior code reviewer. YOU MUST ENFORCE these project rules exactly as written:
+                const prompt = `You are a code reviewer. STRICTLY ENFORCE ONLY these project rules:
 
-            === PROJECT RULES (MANDATORY) ===
+            === PROJECT RULES ===
             ${instructions}
             === END PROJECT RULES ===
 
-            CRITICAL INSTRUCTIONS - FOLLOW EXACTLY:
-            - Check EVERY rule and instruction from the project rules above
-            - Create findings for violations of the specific project rules above
-            - ALSO follow ALL special instructions from the project rules (e.g., BANANA test, blocking comments, etc.)
-            - DO NOT create general code style, performance, or best practice comments UNLESS they violate project rules
-            - ALWAYS reference the exact rule number in rationale (e.g. "Violates Rule 1", "Rule 3 violation")  
-            - If you see word "BANANA" anywhere in code, write "INSTRUCTIONS PICKED UP" in rationale
-            - Architecture violations (Rule 1, Rule 2) = "security" severity
-            - Security violations (Rule 3) = "security" severity  
-            - Style violations (Rule 4) = "major" severity
-            - Documentation violations (Rule 5) = "major" severity
-            - If NO project rules are violated AND no special instructions triggered, return empty findings array: {"findings":[]}
-            - For code fixes, provide EXACT replacement in "suggested_code"
-            - "suggested_code" should contain ONLY the corrected lines (no line numbers, no diff markers)
-            - Use "start_line" and "end_line" for multi-line changes
-            - For warnings/notifications only, set "suggested_code" to null
-            
-            SPECIAL INSTRUCTIONS FROM PROJECT RULES:
-            - BANANA test: If word "BANANA" appears anywhere in the code changes, create a finding with "INSTRUCTIONS PICKED UP" in rationale
-            - New top-level folders: Check if new top-level folders are created (except .github, test, test2, api) - this violates architecture rules
-            - Blocking comments: Mark rule violations as "blocking" when specified in project rules
-            
-            EXAMPLES:
-            - Single line fix: {"line_number": 5, "suggested_code": "const result = await api.getData();"}
-            - Multi-line fix: {"start_line": 10, "end_line": 12, "suggested_code": "if (user) {\n  return user.name;\n}"}
-            - Warning only: {"line_number": 8, "suggested_code": null}
-            - BANANA test: {"line_number": 15, "suggested_code": null, "title": "Test instruction triggered", "rationale": "INSTRUCTIONS PICKED UP - detected BANANA in code"}
+            INSTRUCTIONS:
+            - Follow EVERY rule and instruction from the project rules above EXACTLY
+            - Check for violations of the specific project rules above
+            - Follow ALL special instructions from the project rules
+            - If NO project rules are violated, return empty findings: {"findings":[]}
+            - For code fixes, provide exact replacement in "suggested_code"
+            - For warnings only, set "suggested_code" to null
             
             Return ONLY this JSON format:
-            {"findings":[{"severity":"major|security","title":"brief title","rationale":"explanation + exact rule reference","rule_violated":"Rule X","line_number":123,"suggested_code":"exact replacement code or null","start_line":123,"end_line":125}]}
+            {"findings":[{"severity":"major|security","title":"brief title","rationale":"explanation + rule reference","rule_violated":"Rule X","line_number":123,"suggested_code":"exact replacement code or null","start_line":123,"end_line":125}]}
             
             File: ${file.filename}
             \`\`\`diff
@@ -445,7 +429,7 @@ jobs:
               } catch (error) {
                 if (error.message.includes('All models exhausted')) {
                   console.log(`🚫 CRITICAL: ${error.message}`);
-                  console.log(`Cannot review ${file.filename} - all Free Tier limits exhausted`);
+                  console.log(`Cannot review ${file.filename} - all free tier limits exhausted`);
                 } else {
                   console.log(`Skipped ${file.filename}: ${error.message}`);
                 }

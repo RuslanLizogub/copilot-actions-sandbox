@@ -1,10 +1,10 @@
-# 🤖 AI Code Review Sandbox
+# 🤖 AI Code Review - Project Rules Enforcer
 
-Advanced GitHub Actions workflow for automated code review using Google Gemini AI models with intelligent model fallback and token tracking.
+Clean, focused GitHub Actions workflow that enforces ONLY your project rules using Google Gemini AI models.
 
 ---
 
-## 🚀 Quick Start (2-minute setup)
+## 🚀 Quick Start (3-minute setup)
 
 ### 1. Get Your API Key
 1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
@@ -16,58 +16,64 @@ Advanced GitHub Actions workflow for automated code review using Google Gemini A
 3. Name: `GEMINI_API_KEY`
 4. Value: Your API key from step 1
 
-### 3. Configure Model (Optional)
+### 3. Create Project Rules File
+Create `.github/copilot-instructions.md` with YOUR project rules:
+```markdown
+# Copilot Instructions (PR reviews)
+
+## Our Rules
+1) Architecture: application code must be in /apps/*, libraries in /packages/*; new top-level folders are prohibited.
+2) Patterns: database access only via /packages/data/*. Direct calls outside this layer are prohibited.
+3) Security: do not store secrets, do not commit .env, keys/tokens are forbidden.
+4) Style/Quality: ESLint + Prettier according to repo configs; tests are mandatory for new code.
+5) Documentation: All new code must include relevant documentation updates.
+
+## Test
+- If the word BANANA appears in the code — write the phrase "INSTRUCTIONS PICKED UP" in each comment.
+```
+
+### 4. Configure Workflow (Optional)
 Edit `.github/workflows/ai-code-review.yml`:
 ```yaml
 env:
-  MODEL_CHOICE: 1          # Default: gemini-2.5-pro (1-13, see models below)
-  TEMPERATURE: 0           # AI creativity: 0=deterministic, 1=creative
-  MAX_FILES: 20            # Maximum files to review per PR
-  MAX_DIFF_SIZE: 8000      # Maximum characters per file diff
+  MODEL_CHOICE: 1                                      # Model 1-13 (Default: gemini-2.5-pro)
+  INSTRUCTIONS_FILE: '.github/copilot-instructions.md' # Path to your rules file
+  TEMPERATURE: 0                                       # AI determinism (0=strict, 1=creative)
+  MAX_FILES: 20                                        # Max files per PR
+  MAX_DIFF_SIZE: 8000                                  # Max chars per file
 ```
 
-### 4. Create Project Rules
-Create `.github/copilot-instructions.md` with your project rules:
-```markdown
-## Our Rules
-1) Architecture: application code must be in /apps/*, libraries in /packages/*
-2) Patterns: database access only via /packages/data/*
-3) Security: do not store secrets, do not commit .env files
-4) Style/Quality: ESLint + Prettier according to repo configs
-5) Documentation: All new code must include relevant documentation
-```
-
-**✅ Done!** AI will now review your PRs automatically.
+**✅ Done!** AI enforces ONLY your documented rules.
 
 ---
 
 ## 🎯 Key Features
 
-### 🧠 **Smart Model Selection**
-- **13 Google Gemini models** available (from most powerful to fastest)
-- **Automatic fallback** when rate limits hit (429 errors)
-- **Always starts with best model** available
+### 🎯 **Rules-Only Focus**
+- **STRICTLY enforces your project rules** from instructions file
+- **No generic advice** - only violations of YOUR documented standards
+- **Clean, noise-free reviews** focused on what matters to your project
 
-### 📊 **Advanced Token Tracking**
+### 🧠 **Smart Model Fallback**
+- **13 Google Gemini models** with automatic failover
+- **Rate limit handling** - seamlessly tries next model when limits hit
+- **Always uses best available model** for highest quality reviews
+
+### 📋 **Configurable Instructions**
+- **Custom rules file path** via `INSTRUCTIONS_FILE` variable
+- **Easy rule changes** - just edit your instructions file
+- **Flexible setup** - can point to any markdown file with rules
+
+### 📊 **Token Transparency**
 - **Real-time token usage** displayed in each comment
-- Shows `input + output + thinking = total` tokens used
-- **Thinking tokens** reveal AI's reasoning process (when available)
-- Helps monitor Free Tier limits accurately
+- **Mathematical validation** of API token calculations
+- **Thinking tokens detection** for advanced models (when available)
+- **Free tier monitoring** to track usage limits
 
-### 📋 **Project-Specific Rules**
-- **Only comments on YOUR rules** (no generic advice)
-- **Must reference specific rule** (e.g. "Violates Rule 1")
-- **No noise** - only violations of your documented standards
-
-### 🎨 **Smart Comments**
-- **Inline suggestions** with exact code fixes
-- **Severity levels**: 🛡️ Security, 🔴 Major
-- **Model attribution** showing which AI and tokens used
-
-### 🔄 **Robust Fallback**
-- **Rate limit handling** - automatically tries next model
-- **Error recovery** - continues review even if one model fails
-- **Complete failure protection** - only stops when ALL models exhausted
+### 🎨 **Clean Comments**
+- **Inline code suggestions** with exact fixes
+- **Rule references** showing which specific rule was violated
+- **Model attribution** with token breakdown
 
 ---
 
@@ -91,167 +97,183 @@ Create `.github/copilot-instructions.md` with your project rules:
 
 ```mermaid
 graph TD
-    A[PR Created] --> B[Load Project Rules]
-    B --> C[Try Model #1 gemini-2.5-pro]
+    A[PR Created] --> B[Load Rules File]
+    B --> C[Try Model #1]
     C --> D{Rate Limit?}
-    D -->|Yes 429| E[Try Model #2 gemini-2.5-flash]
-    D -->|No| F[Analyze Code vs Rules]
-    E --> G{Rate Limit?}
-    G -->|Yes 429| H[Try Next Model...]
-    G -->|No| F
-    F --> I[Post Inline Comments]
-    I --> J[Show Tokens Used]
+    D -->|Yes| E[Try Next Model]
+    D -->|No| F[Check Code vs Rules]
+    E --> D
+    F --> G{Rule Violated?}
+    G -->|Yes| H[Create Inline Comment]
+    G -->|No| I[Skip File]
+    H --> J[Show Tokens Used]
+    I --> K[Next File]
+    J --> K
 ```
 
 ### 🔍 **Review Process**
-1. **Loads** your project rules from `.github/copilot-instructions.md`
-2. **Starts** with most powerful model available
-3. **Checks** each changed file against YOUR rules only
-4. **Falls back** to next model if rate limited
-5. **Creates** inline comments with exact fixes
-6. **Shows** token usage and model used
+1. **Loads** your rules from configurable instructions file
+2. **Tries models** in priority order (most powerful first)  
+3. **Checks** each file diff against YOUR rules ONLY
+4. **Creates** inline comments only for rule violations
+5. **Shows** token usage and model attribution
 
 ### 📁 **File Structure**
 ```
 .github/
 ├── workflows/
-│   └── ai-code-review.yml     # Main workflow (13 models + fallback)
-└── copilot-instructions.md    # YOUR project rules (required)
+│   └── ai-code-review.yml        # Main workflow
+└── copilot-instructions.md       # Project rules (configurable path)
 ```
 
 ---
 
-## 🛠️ Customization
+## 🛠️ Configuration
 
-### Configuration Parameters
-All settings are in `.github/workflows/ai-code-review.yml` env section:
+### Environment Variables
+All settings in `.github/workflows/ai-code-review.yml`:
 
 ```yaml
 env:
-  # Model Selection
-  MODEL_CHOICE: 2          # Which model to prefer (1-13)
+  # Model Selection (1-13)
+  MODEL_CHOICE: 1              # Default: gemini-2.5-pro (highest quality)
   
-  # AI Behavior  
-  TEMPERATURE: 0           # Creativity level (0-1)
-                          # 0 = Deterministic, consistent results
-                          # 0.3 = Slightly varied, good balance  
-                          # 1 = Creative, unpredictable
-                          # 🎯 RECOMMENDED: 0 for code reviews
+  # Instructions File Path  
+  INSTRUCTIONS_FILE: '.github/copilot-instructions.md'  # Your rules file
   
-  # Review Scope Limits
-  MAX_FILES: 20           # Maximum files to review per PR
-                         # Higher = more thorough but uses more tokens
-                         # 🎯 RECOMMENDED: 10-20 for most repos
-                         
-  MAX_DIFF_SIZE: 8000    # Maximum characters per file diff
-                        # Larger diffs = more context but more tokens
-                        # 🎯 RECOMMENDED: 5000-10000 characters
+  # AI Behavior
+  TEMPERATURE: 0               # 0=deterministic, 1=creative (recommended: 0)
+  
+  # Review Limits
+  MAX_FILES: 20               # Max files per PR (recommended: 10-20)
+  MAX_DIFF_SIZE: 8000         # Max characters per file (recommended: 5K-10K)
 ```
 
-### Model Priority Customization
-Edit the workflow to reorder `MODELS_BY_PRIORITY` array for different fallback order.
+### Custom Rules File
+Change `INSTRUCTIONS_FILE` to use different rules:
+```yaml
+INSTRUCTIONS_FILE: 'docs/review-rules.md'      # Custom path
+INSTRUCTIONS_FILE: '.github/team-standards.md' # Team-specific rules
+```
 
-### Rule Severity
-- **Architecture violations** → 🛡️ Security
-- **Other rule violations** → 🔴 Major
+### Rule Format
+Your instructions file can contain:
+- Project-specific rules numbered 1, 2, 3...
+- Special test instructions (e.g., BANANA test)
+- Severity guidelines
+- Blocking comment requirements
+
+**Note**: AI follows ONLY what's written in your instructions file - no built-in assumptions.
 
 ---
 
 ## 📈 Example Comments
 
-### Standard Comment
+### Basic Rule Violation
 ```
-🤖 AI Review 🔴 MAJOR: Direct database access detected
+🤖 AI Review 🔴 MAJOR: Architecture violation detected
 
-📋 Project Rule Violation: Rule 2
+📋 Project Rule Violation: Rule 1
 
-This code directly imports from database layer instead of using 
-/packages/data/* abstraction as required by our architecture.
+This code creates a new top-level folder 'services' which violates our architecture rule. 
+Application code must be in /apps/*, libraries in /packages/*.
 
 Suggested fix:
 ```suggestion
-import { getUserData } from '/packages/data/users';
+// Move this file to /apps/api/services/ or /packages/shared/services/
 ```
 
 ---
-🔮 Generated by: gemini-2.5-flash (Priority 2)  
-📊 Token usage: 1,250 input + 87 output = 1,337 total
+🔮 Generated by: gemini-2.5-flash (Priority 2)
+📊 Token usage: 1,123 input + 89 output = 1,212 total
 ```
 
 ### With Thinking Tokens (Advanced Models)
 ```
-🤖 AI Review 🛡️ SECURITY: Architecture violation
+🤖 AI Review 🛡️ SECURITY: Secret detection
 
-📋 Project Rule Violation: Rule 1
+📋 Project Rule Violation: Rule 3
 
-Direct access to database bypasses our data layer abstraction...
+Environment variable contains what appears to be an API key committed to code.
 
 ---
 🔮 Generated by: gemini-2.5-pro (Priority 1)
-📊 Token usage: 1,804 input + 177 output + 503 thinking = 2,484 total
+📊 Token usage: 1,456 input + 67 output + 234 thinking = 1,757 total
+```
+
+### Special Test Instruction
+```
+🤖 AI Review 📌 MAJOR: Test instruction triggered
+
+INSTRUCTIONS PICKED UP - detected BANANA in code
+
+---
+🔮 Generated by: gemini-2.5-flash (Priority 2)
+📊 Token usage: 892 input + 23 output = 915 total
 ```
 
 ---
 
 ## 🚨 Troubleshooting
 
-**No comments appearing?**
-- Check `.github/copilot-instructions.md` exists
-- Verify `GEMINI_API_KEY` is set in repo secrets
-- Look at Actions logs for errors
+### No Comments Appearing?
+1. **Check rules file exists**: Your `INSTRUCTIONS_FILE` path is valid
+2. **Verify API key**: `GEMINI_API_KEY` secret is set correctly
+3. **Check Actions logs**: Look for errors in workflow execution
+4. **Test with known violation**: Make a change that clearly violates your rules
 
-**"All models exhausted" error?**
-- You've hit Free Tier limits on all models
-- Wait for limits to reset (hourly/daily)
-- Consider upgrading to paid tier
+### Rate Limit Errors?
+- **"All models exhausted"** = free tier limits hit on ALL 13 models
+- **Wait for reset**: Limits reset hourly/daily depending on model
+- **Reduce usage**: Lower `MAX_FILES` or `MAX_DIFF_SIZE`
+- **Upgrade tier**: Consider paid Google AI plan for higher limits
 
-**Reviews taking too long?**
-- Reduce `MAX_FILES` (try 10 instead of 20)
-- Reduce `MAX_DIFF_SIZE` (try 5000 instead of 8000)
-- Use faster model like #2 (gemini-2.5-flash)
+### Wrong File Path?
+```yaml
+# Update the instructions file path
+INSTRUCTIONS_FILE: 'path/to/your/rules.md'
+```
 
-**Inconsistent AI responses?**
-- Lower `TEMPERATURE` to 0 for deterministic results
-- Higher TEMPERATURE (0.3-0.7) for more creative suggestions
-- Never use TEMPERATURE > 0.5 for code reviews
+### AI Not Following Rules?
+- **Be specific**: Write clear, numbered rules in your instructions file
+- **Test instructions**: Add BANANA test to verify AI reads your file
+- **Set TEMPERATURE: 0**: For consistent rule enforcement
 
-**Too many generic comments?**
-- Update your `.github/copilot-instructions.md` to be more specific
-- AI only comments on violations of YOUR documented rules
+### Token Usage Issues?
+- **High usage**: Reduce `MAX_DIFF_SIZE` and `MAX_FILES`
+- **Math errors**: We show both calculated and API-reported totals when they differ
+- **Thinking tokens**: Advanced models (2.5-pro) show internal reasoning process
 
-**Token usage too high?**
-- Smaller `MAX_DIFF_SIZE` = fewer tokens per file
-- Fewer `MAX_FILES` = fewer tokens per PR
-- Monitor token usage in comment signatures
-- **Thinking tokens** appear on advanced models (2.5-pro) - these show AI's reasoning process
-
-**Understanding token breakdown:**
-- **Input tokens** = your prompt + code + instructions
-- **Output tokens** = AI's response (comments, suggestions)
-- **Thinking tokens** = AI's internal reasoning (only on advanced models like 2.5-pro)
-- **Total** = sum of all token types used
-- **Note**: Sometimes API math differs from calculated total - we show both values for transparency
-
----
-
-*🔥 Built with GitHub Actions + Google Gemini AI*
-	 # Configure
-	 ./config.sh --url https://github.com/<owner>/<repo> --token <TOKEN>
-	 # Start
-	 ./run.sh
-	 ```
-4. Add to workflow:
-	 ```yaml
-	 runs-on: self-hosted
-	 ```
+### Performance Optimization?
+```yaml
+# For faster reviews
+MODEL_CHOICE: 2          # Use gemini-2.5-flash instead of 2.5-pro
+MAX_FILES: 10           # Review fewer files
+MAX_DIFF_SIZE: 5000     # Smaller diffs
+```
 
 ---
 
-## Useful Links
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Self-hosted Runners](https://docs.github.com/en/actions/hosting-your-own-runners/about-self-hosted-runners)
-- [Actions Marketplace](https://github.com/marketplace?type=actions)
+## � Resources
+
+- **Google AI Studio**: [Get your free API key](https://aistudio.google.com/app/apikey)
+- **GitHub Actions**: [Workflow documentation](https://docs.github.com/en/actions)
+- **Gemini API**: [Rate limits and pricing](https://ai.google.dev/pricing)
 
 ---
 
-*This guide is designed for quick onboarding and reference. For advanced topics, see the official documentation.*
+## 📝 Philosophy
+
+This AI Code Review tool is designed with a **rules-first approach**:
+
+- ✅ **Enforces YOUR rules** - not generic best practices
+- ✅ **Zero noise** - only comments on documented violations  
+- ✅ **Configurable** - easy to customize for any project
+- ✅ **Transparent** - shows exactly which model and tokens used
+- ✅ **Reliable** - automatic fallback when rate limits hit
+
+**Perfect for teams that want AI code review focused on their specific standards.**
+
+---
+
+*🔥 Built with GitHub Actions + Google Gemini AI • Focus on YOUR rules, not generic advice*

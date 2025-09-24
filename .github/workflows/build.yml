@@ -10,7 +10,7 @@ jobs:
         uses: actions/checkout@v5
     #   - name: Install dependencies
     #     run: npm ci
-    #   - name: Npm run ESLint
+    #   - name: Run ESLint
     #     run: npm run lint
       - name: Show file structure
         run: ls -la
