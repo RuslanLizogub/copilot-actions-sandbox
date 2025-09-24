@@ -11,7 +11,7 @@ describe('User CRUD', () => {
   });
 });
 
-describe('Document CRUD', () => {
+describe('Document CRUD and BANANA', () => {
   it('should get a document', async () => {
     const res = await jsonPlaceholder.getPost(1);
     expect(res.status).to.equal(200);

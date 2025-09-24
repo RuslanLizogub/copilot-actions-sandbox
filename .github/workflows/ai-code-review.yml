@@ -1,0 +1,437 @@
+# AI Code Review with ALL Google Gemini Models
+#
+# 🔧 SETUP REQUIRED:
+# 1. Set GEMINI_API_KEY in GitHub repository secrets (Settings → Secrets and variables → Actions)
+# 2. Get your API key from: https://aistudio.google.com/app/apikey
+# 3. Create project rules file (default: .github/copilot-instructions.md) - path configurable via INSTRUCTIONS_FILE
+#
+# ⚡ QUICK MODEL SELECTION - Change this number (1-13):
+# 1=2.5-pro⭐ 2=2.5-flash 3=2.5-flash-lite 4=2.0-flash 5=2.0-flash-lite
+# 6=2.5-live 7=2.0-live 8=TTS 9=image-gen 10=gemma 11=embedding 12=1.5-flash 13=1.5-flash-8b
+env:
+  MODEL_CHOICE: 1           # ⬅️ CHANGE THIS NUMBER (1-13) - Default: gemini-2.5-pro (best quality)
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}  # 🔑 Set this in repo secrets!
+  
+  # 📋 PROJECT INSTRUCTIONS FILE
+  INSTRUCTIONS_FILE: '.github/copilot-instructions.md'  # ⬅️ Path to project rules file
+  
+  # 🎛️ AI BEHAVIOR SETTINGS
+  TEMPERATURE: 0            # ⬅️ 0=deterministic, 1=creative (0-1, recommended: 0 for code review)
+  
+  # 📁 REVIEW SCOPE LIMITS  
+  MAX_FILES: 20             # ⬅️ Maximum files to review per PR (recommended: 10-20)
+  MAX_DIFF_SIZE: 8000       # ⬅️ Maximum characters per file diff (recommended: 5000-10000)
+
+# 📊 COMPLETE FREE TIER LIMITS (RPM=Per Minute, RPH=Per Hour, RPD=Per Day, TPM=Tokens Per Minute):
+#
+# 🏆 TEXT-OUT MODELS (Best for code review):
+# 1. gemini-2.5-pro      ⭐ | 5 RPM, 300 RPH, 100 RPD   | 250K TPM | DEFAULT - Highest quality
+# 2. gemini-2.5-flash       | 10 RPM, 600 RPH, 250 RPD  | 250K TPM | Fast & efficient alternative
+# 3. gemini-2.5-flash-lite  | 15 RPM, 900 RPH, 1K RPD   | 250K TPM | Lightweight, high volume
+# 4. gemini-2.0-flash       | 15 RPM, 900 RPH, 200 RPD  | 1M TPM   | Advanced features
+# 5. gemini-2.0-flash-lite  | 30 RPM, 1.8K RPH, 200 RPD | 1M TPM   | High frequency
+#
+# 🔴 LIVE API MODELS (Streaming):
+# 6. gemini-2.5-flash-live  | 3 sessions max | 1M TPM | Real-time analysis
+# 7. gemini-2.0-flash-live  | 3 sessions max | 1M TPM | Live streaming 2.0
+#
+# 🎨 MULTI-MODAL MODELS:
+# 8. gemini-2.5-flash-preview-tts           | 3 RPM, 180 RPH, 15 RPD    | 10K TPM  | Text-to-Speech
+# 9. gemini-2.0-flash-preview-image-gen     | 10 RPM, 600 RPH, 100 RPD  | 200K TPM | Image generation
+#
+# 🔧 OTHER MODELS:
+# 10. gemma-3-8b           | 30 RPM, 1.8K RPH, 14.4K RPD | 15K TPM  | Open source
+# 11. text-embedding-004   | 100 RPM, 6K RPH, 1K RPD     | 30K TPM  | Embeddings/search
+#
+# 📦 LEGACY MODELS (Deprecated but available):
+# 12. gemini-1.5-flash     | 15 RPM, 900 RPH, 50 RPD     | 250K TPM | Stable legacy
+# 13. gemini-1.5-flash-8b  | 15 RPM, 900 RPH, 50 RPD     | 250K TPM | Lightweight legacy
+
+name: AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+
+jobs:
+  ai-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            // Configuration - Models by Priority (most powerful → least powerful)
+            const MODELS_BY_PRIORITY = [
+              { name: 'gemini-2.5-pro', desc: 'Highest quality', priority: 1 },
+              { name: 'gemini-2.5-flash', desc: 'Fast & efficient', priority: 2 },
+              { name: 'gemini-2.0-flash', desc: 'Advanced features', priority: 3 },
+              { name: 'gemini-2.5-flash-lite', desc: 'Lightweight', priority: 4 },
+              { name: 'gemini-2.0-flash-lite', desc: 'High frequency', priority: 5 },
+              { name: 'gemini-1.5-flash', desc: 'Legacy stable', priority: 6 },
+              { name: 'gemini-1.5-flash-8b', desc: 'Legacy lightweight', priority: 7 },
+              { name: 'gemma-3-8b', desc: 'Open source fallback', priority: 8 }
+            ];
+            
+            // Available models for selection (backward compatibility)
+            const AVAILABLE_MODELS = {
+              1: MODELS_BY_PRIORITY[0], 2: MODELS_BY_PRIORITY[1], 3: MODELS_BY_PRIORITY[3],
+              4: MODELS_BY_PRIORITY[2], 5: MODELS_BY_PRIORITY[4], 6: { name: 'gemini-2.5-flash-live', desc: 'Live streaming' },
+              7: { name: 'gemini-2.0-flash-live', desc: 'Live 2.0' }, 8: { name: 'gemini-2.5-flash-preview-tts', desc: 'Text-to-Speech' },
+              9: { name: 'gemini-2.0-flash-preview-image-generation', desc: 'Image generation' }, 10: MODELS_BY_PRIORITY[7],
+              11: { name: 'text-embedding-004', desc: 'Embeddings' }, 12: MODELS_BY_PRIORITY[5], 13: MODELS_BY_PRIORITY[6]
+            };
+            
+            // Model Selection - Get from environment variable
+            const MODEL_CHOICE = parseInt(process.env.MODEL_CHOICE) || 1;
+            
+            // Get selected model (for fallback priority)
+            let selectedModel = AVAILABLE_MODELS[MODEL_CHOICE];
+            if (!selectedModel) {
+              console.log(`Error: Invalid model choice ${MODEL_CHOICE}. Using default model.`);
+              selectedModel = MODELS_BY_PRIORITY[0]; // Default to gemini-2.5-pro
+            }
+            
+            // Function to try AI request with fallback
+            async function tryAIRequest(prompt, fileName, temperature) {
+              const modelsToTry = MODELS_BY_PRIORITY;
+              
+              for (let i = 0; i < modelsToTry.length; i++) {
+                const model = modelsToTry[i];
+                console.log(`Trying ${model.name} (priority ${model.priority}) for ${fileName}`);
+                
+                try {
+                  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model.name}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      contents: [{ parts: [{ text: prompt }] }],
+                      generationConfig: { temperature: temperature }
+                    })
+                  });
+                  
+                  if (response.status === 429) {
+                    console.log(`❌ Rate limit hit for ${model.name}, trying next model...`);
+                    continue;
+                  }
+                  
+                  if (!response.ok) {
+                    console.log(`❌ Error ${response.status} for ${model.name}, trying next model...`);
+                    continue;
+                  }
+                  
+                  const data = await response.json();
+                  
+                  // Debug: Log full response structure for thinking tokens investigation
+                  console.log('🔍 Full API response structure:', JSON.stringify(data, null, 2));
+                  
+                  // Extract token usage from multiple possible locations
+                  const usageMeta = data.usageMetadata || {};
+                  const candidates = data.candidates || [];
+                  const firstCandidate = candidates[0] || {};
+                  
+                  // Check all possible locations for thinking tokens
+                  console.log('🔍 Checking usageMetadata:', Object.keys(usageMeta));
+                  console.log('🔍 Checking candidates structure:', Object.keys(firstCandidate));
+                  console.log('🔍 First candidate content:', firstCandidate.content ? Object.keys(firstCandidate.content) : 'no content');
+                  
+                  // Look for thinking tokens in multiple places
+                  let thinkingTokens = 0;
+                  
+                  // Method 1: usageMetadata
+                  thinkingTokens = usageMeta.thinkingTokenCount || 
+                                  usageMeta.cachedContentTokenCount || 
+                                  usageMeta.reasoningTokenCount || 
+                                  usageMeta.thoughtTokenCount || 0;
+                  
+                  // Method 2: Check candidates for thinking info
+                  if (thinkingTokens === 0 && firstCandidate.usageMetadata) {
+                    const candidateUsage = firstCandidate.usageMetadata;
+                    console.log('🔍 Candidate usageMetadata:', Object.keys(candidateUsage));
+                    thinkingTokens = candidateUsage.thinkingTokenCount || 
+                                    candidateUsage.reasoningTokenCount || 0;
+                  }
+                  
+                  // Method 3: Check for any field containing "thinking" or "reasoning"
+                  if (thinkingTokens === 0) {
+                    const allKeys = [
+                      ...Object.keys(usageMeta),
+                      ...(firstCandidate.usageMetadata ? Object.keys(firstCandidate.usageMetadata) : [])
+                    ];
+                    const thinkingKey = allKeys.find(key => 
+                      key.toLowerCase().includes('thinking') || 
+                      key.toLowerCase().includes('reasoning') || 
+                      key.toLowerCase().includes('thought')
+                    );
+                    if (thinkingKey) {
+                      thinkingTokens = usageMeta[thinkingKey] || (firstCandidate.usageMetadata && firstCandidate.usageMetadata[thinkingKey]) || 0;
+                      console.log(`🔍 Found thinking tokens in field: ${thinkingKey} = ${thinkingTokens}`);
+                    }
+                  }
+                  
+                  const tokenUsage = {
+                    inputTokens: usageMeta.promptTokenCount || 0,
+                    outputTokens: usageMeta.candidatesTokenCount || 0,
+                    thinkingTokens: thinkingTokens,
+                    totalTokens: usageMeta.totalTokenCount || 0
+                  };
+                  
+                  // Debug: Show what fields are available and their values
+                  console.log('🔍 Available usage metadata fields:', Object.keys(usageMeta));
+                  console.log('🔍 All usageMetadata values:', usageMeta);
+                  console.log('🔍 Raw token values extracted:', tokenUsage);
+                  
+                  // Look for any unexplained difference in total
+                  const inputOutput = tokenUsage.inputTokens + tokenUsage.outputTokens;
+                  const withThinking = inputOutput + tokenUsage.thinkingTokens;
+                  const unexplained = tokenUsage.totalTokens - withThinking;
+                  
+                  if (unexplained > 1) {
+                    console.log(`🔍 UNEXPLAINED TOKENS: ${unexplained} tokens not accounted for!`);
+                    console.log(`🔍 Breakdown: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output + ${tokenUsage.thinkingTokens} thinking = ${withThinking}, but total = ${tokenUsage.totalTokens}`);
+                    
+                    // Search for any numeric field that might contain the missing tokens
+                    for (const [key, value] of Object.entries(usageMeta)) {
+                      if (typeof value === 'number' && value > 0 && !['promptTokenCount', 'candidatesTokenCount', 'totalTokenCount'].includes(key)) {
+                        console.log(`🔍 Other numeric field found: ${key} = ${value}`);
+                      }
+                    }
+                  }
+                  
+                  // Calculate corrected total if thinking tokens are present or math doesn't match
+                  const calculatedTotal = tokenUsage.inputTokens + tokenUsage.outputTokens + tokenUsage.thinkingTokens;
+                  const hasDiscrepancy = Math.abs(calculatedTotal - tokenUsage.totalTokens) > 1;
+                  
+                  if (hasDiscrepancy) {
+                    console.log(`🔍 MATH MISMATCH: ${calculatedTotal} calculated vs ${tokenUsage.totalTokens} reported (diff: ${tokenUsage.totalTokens - calculatedTotal})`);
+                    
+                    // Try to find the missing tokens by checking if any field contains the difference
+                    const difference = tokenUsage.totalTokens - calculatedTotal;
+                    if (difference > 0) {
+                      console.log(`🔍 Looking for ${difference} missing tokens in API response...`);
+                      
+                      // Check all numeric fields for potential matches
+                      for (const [key, value] of Object.entries(usageMeta)) {
+                        if (typeof value === 'number' && Math.abs(value - difference) <= 1) {
+                          console.log(`🔍 POTENTIAL MATCH: ${key} = ${value} (close to missing ${difference})`);
+                          if (!['promptTokenCount', 'candidatesTokenCount', 'totalTokenCount', 'thinkingTokenCount', 'cachedContentTokenCount'].includes(key)) {
+                            console.log(`🔍 Using ${key} as additional tokens`);
+                            tokenUsage.additionalTokens = value;
+                            tokenUsage.additionalTokenField = key;
+                          }
+                        }
+                      }
+                    }
+                    
+                    tokenUsage.correctedTotal = calculatedTotal + (tokenUsage.additionalTokens || 0);
+                  }
+                  
+                  console.log(`✅ Success with ${model.name} for ${fileName}`);
+                  
+                  // Enhanced token logging
+                  if (tokenUsage.thinkingTokens > 0) {
+                    const displayTotal = tokenUsage.correctedTotal || tokenUsage.totalTokens;
+                    console.log(`📊 Token usage: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output + ${tokenUsage.thinkingTokens} thinking = ${displayTotal} total`);
+                  } else {
+                    const simpleTotal = tokenUsage.inputTokens + tokenUsage.outputTokens;
+                    if (Math.abs(simpleTotal - tokenUsage.totalTokens) > 1) {
+                      console.log(`📊 Token usage: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output = ${simpleTotal} calculated (API reported: ${tokenUsage.totalTokens})`);
+                    } else {
+                      console.log(`📊 Token usage: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output = ${tokenUsage.totalTokens} total`);
+                    }
+                  }
+                  
+                  return { data, modelUsed: model, tokenUsage };
+                  
+                } catch (error) {
+                  console.log(`❌ Exception with ${model.name}: ${error.message}, trying next model...`);
+                  continue;
+                }
+              }
+              
+              throw new Error('🚫 All models exhausted - free tier limits reached for all available models');
+            }
+            
+            // Configuration from environment variables
+            const TEMPERATURE = parseFloat(process.env.TEMPERATURE) || 0;
+            const MAX_FILES = parseInt(process.env.MAX_FILES) || 20;
+            const MAX_DIFF_SIZE = parseInt(process.env.MAX_DIFF_SIZE) || 8000;
+            
+            console.log(`🎛️ Configuration: TEMP=${TEMPERATURE}, MAX_FILES=${MAX_FILES}, MAX_DIFF_SIZE=${MAX_DIFF_SIZE}`);
+            
+            console.log(`Starting review with priority model: ${selectedModel.name} (${selectedModel.desc})`);
+            
+            // Load project instructions - fail if not found
+            const INSTRUCTIONS_FILE = process.env.INSTRUCTIONS_FILE || '.github/copilot-instructions.md';
+            let instructions = '';
+            try {
+              instructions = fs.readFileSync(INSTRUCTIONS_FILE, 'utf8');
+              console.log(`✅ Loaded instructions from ${INSTRUCTIONS_FILE} successfully`);
+              console.log('📋 Instructions content:');
+              console.log(instructions);
+              console.log('📋 Instructions loaded, length:', instructions.length);
+            } catch (error) {
+              console.log(`❌ ERROR: Could not load ${INSTRUCTIONS_FILE}`);
+              console.log('Error details:', error.message);
+              return;
+            }
+            
+            // Get changed files
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
+            const filesToReview = files
+              .filter(f => f.patch && f.status !== 'removed')
+              .slice(0, MAX_FILES);
+            
+            // Delete old AI comments
+            const { data: comments } = await github.rest.pulls.listReviewComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            
+            for (const comment of comments.filter(c => c.body.includes('🤖 AI Review'))) {
+              await github.rest.pulls.deleteReviewComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: comment.id,
+              }).catch(() => {});
+            }
+            
+            // Review each file
+            for (const file of filesToReview) {
+              try {
+                const prompt = `You are a code reviewer. STRICTLY ENFORCE ONLY these project rules:
+
+            === PROJECT RULES ===
+            ${instructions}
+            === END PROJECT RULES ===
+
+            INSTRUCTIONS:
+            - Follow EVERY rule and instruction from the project rules above EXACTLY
+            - Check for violations of the specific project rules above
+            - Follow ALL special instructions from the project rules
+            - If NO project rules are violated, return empty findings: {"findings":[]}
+            - For code fixes, provide exact replacement in "suggested_code"
+            - For warnings only, set "suggested_code" to null
+            
+            Return ONLY this JSON format:
+            {"findings":[{"severity":"major|security","title":"brief title","rationale":"explanation + rule reference","rule_violated":"Rule X","line_number":123,"suggested_code":"exact replacement code or null","start_line":123,"end_line":125}]}
+            
+            File: ${file.filename}
+            \`\`\`diff
+            ${file.patch.substring(0, MAX_DIFF_SIZE)}
+            \`\`\``;
+            
+                console.log(`Reviewing ${file.filename}...`);
+                
+                // Try AI request with model fallback
+                const aiResult = await tryAIRequest(prompt, file.filename, TEMPERATURE);
+                const data = aiResult.data;
+                const modelUsed = aiResult.modelUsed;
+                const tokenUsage = aiResult.tokenUsage;
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+                console.log(`AI response for ${file.filename}:`, text.substring(0, 200));
+                
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                const result = jsonMatch ? JSON.parse(jsonMatch[0]) : { findings: [] };
+                
+                console.log(`Found ${result.findings?.length || 0} findings for ${file.filename}`);
+                
+                // Create comments
+                const { data: pr } = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: context.issue.number,
+                });
+                
+                for (const finding of result.findings || []) {
+                  const icons = { major: '🔴', security: '🛡️' };
+                  let body = `🤖 **AI Review** ${icons[finding.severity] || '📌'} **${finding.severity.toUpperCase()}**: ${finding.title}`;
+                  
+                  // Add rule reference prominently
+                  if (finding.rule_violated) {
+                    body += `\n\n**📋 Project Rule Violation:** ${finding.rule_violated}`;
+                  }
+                  
+                  body += `\n\n${finding.rationale}`;
+                  
+                  // Add suggested code change if provided
+                  if (finding.suggested_code) {
+                    body += `\n\n**Suggested fix:**\n\`\`\`suggestion\n${finding.suggested_code}\n\`\`\``;
+                  }
+                  
+                  // Add model signature with token usage
+                  body += `\n\n---\n*🔮 Generated by: **${modelUsed.name}** (Priority ${modelUsed.priority})*`;
+                  
+                  // Add token usage with thinking tokens if present
+                  const hasThinking = tokenUsage.thinkingTokens > 0;
+                  const hasAdditional = tokenUsage.additionalTokens > 0;
+                  const displayTotal = tokenUsage.correctedTotal || tokenUsage.totalTokens;
+                  
+                  if (hasThinking || hasAdditional) {
+                    let tokenBreakdown = `${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output`;
+                    if (hasThinking) {
+                      tokenBreakdown += ` + ${tokenUsage.thinkingTokens} thinking`;
+                    }
+                    if (hasAdditional) {
+                      tokenBreakdown += ` + ${tokenUsage.additionalTokens} ${tokenUsage.additionalTokenField}`;
+                    }
+                    tokenBreakdown += ` = **${displayTotal} total**`;
+                    
+                    body += `\n*📊 Token usage: ${tokenBreakdown}*`;
+                    
+                    if (tokenUsage.correctedTotal && Math.abs(tokenUsage.correctedTotal - tokenUsage.totalTokens) > 1) {
+                      body += `\n*⚠️ Note: API reported ${tokenUsage.totalTokens}, calculated ${tokenUsage.correctedTotal}*`;
+                    }
+                  } else {
+                    // Check if the math is wrong even without thinking tokens
+                    const simpleTotal = tokenUsage.inputTokens + tokenUsage.outputTokens;
+                    if (Math.abs(simpleTotal - tokenUsage.totalTokens) > 1) {
+                      body += `\n*📊 Token usage: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output = **${simpleTotal} calculated** (API: ${tokenUsage.totalTokens})*`;
+                      body += `\n*⚠️ Mathematical discrepancy detected - investigating token fields*`;
+                    } else {
+                      body += `\n*📊 Token usage: ${tokenUsage.inputTokens} input + ${tokenUsage.outputTokens} output = **${tokenUsage.totalTokens} total***`;
+                    }
+                  }
+                  
+                  const commentParams = {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: context.issue.number,
+                    commit_id: pr.head.sha,
+                    path: file.filename,
+                    body,
+                  };
+                  
+                  // Use start_line and end_line for multi-line suggestions if provided
+                  if (finding.start_line && finding.end_line && finding.start_line !== finding.end_line) {
+                    commentParams.start_line = finding.start_line;
+                    commentParams.line = finding.end_line;
+                    commentParams.start_side = 'RIGHT';
+                    commentParams.side = 'RIGHT';
+                  } else {
+                    commentParams.line = finding.line_number || 1;
+                  }
+                  
+                  await github.rest.pulls.createReviewComment(commentParams).catch(() => {});
+                }
+              } catch (error) {
+                if (error.message.includes('All models exhausted')) {
+                  console.log(`🚫 CRITICAL: ${error.message}`);
+                  console.log(`Cannot review ${file.filename} - all free tier limits exhausted`);
+                } else {
+                  console.log(`Skipped ${file.filename}: ${error.message}`);
+                }
+              }
+            }

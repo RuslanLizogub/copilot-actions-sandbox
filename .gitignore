@@ -4,6 +4,10 @@ coverage/
 .env
 .env.*
 
+# API Keys
+**/api-keys.ts
+**/*-keys.ts
+
 # Logs
 npm-debug.log*
 yarn-debug.log*

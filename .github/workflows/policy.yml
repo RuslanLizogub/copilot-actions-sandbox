@@ -1,7 +1,7 @@
 name: Policy - Repo structure
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+      branches: [test]
 
 permissions:
   contents: read
