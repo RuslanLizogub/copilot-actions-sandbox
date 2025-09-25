@@ -3,7 +3,7 @@ import { GoogleClient } from './clients/googleClient';
 
 const google = new GoogleClient();
 
-describe('Google GPT Codex search', () => {
+describe('Google GPT Codex search and BANANA', () => {
   it('loads the Google home page', async () => {
     try {
       const res = await google.loadHomePage();
