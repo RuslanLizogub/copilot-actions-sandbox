@@ -9,6 +9,7 @@ describe('User CRUD and banana', () => {
       const res = await jsonPlaceholder.createUser({ name: 'Test User' });
       expect(res.status).to.equal(201);
       expect(res.body).to.have.property('name', 'Test User');
+      expect(res.body).to.have.property('id').that.is.a('number');
     } catch (err) {
       expect.fail(`Network or API error: ${err instanceof Error ? err.message : String(err)}`);
     }

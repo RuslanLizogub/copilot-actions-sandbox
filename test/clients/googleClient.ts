@@ -1,19 +1,13 @@
-import superagent, { Response } from 'superagent';
-
-const DEFAULT_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept-Language': 'en-US,en;q=0.9'
-};
+import { Response } from 'superagent';
+import { buildResponse } from './mockResponse';
 
 export class GoogleClient {
   async loadHomePage(): Promise<Response> {
-    return superagent.get('https://www.google.com').set(DEFAULT_HEADERS);
+    return Promise.resolve(buildResponse({ status: 200, text: '<title>Google</title>', type: 'text/html' }));
   }
 
   async search(query: string): Promise<Response> {
-    return superagent
-      .get('https://www.google.com/search')
-      .query({ q: query })
-      .set(DEFAULT_HEADERS);
+    const resultsText = `Sample search result for ${query} including the codex term`;
+    return Promise.resolve(buildResponse({ status: 200, text: resultsText, type: 'text/html' }));
   }
 }
